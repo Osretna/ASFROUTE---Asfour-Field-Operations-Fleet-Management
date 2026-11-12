@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { useApp } from '../../context/AppContext';
 import { Vehicle, WorkOrder, DriverDiligenceStatus } from '../../types';
-import { BRANCHES } from '../../data/mockData';
+import { BRANCHES, INITIAL_VEHICLES } from '../../data/mockData';
 import { 
   Navigation, 
   MapPin, 
@@ -75,7 +75,8 @@ export const LiveFleetMissionTracker: React.FC<LiveFleetMissionTrackerProps> = (
   const corridorLayerRef = useRef<L.LayerGroup | null>(null);
   const routeLayerRef = useRef<L.LayerGroup | null>(null);
 
-  const selectedVehicle = vehicles.find(v => v.id === selectedVehicleId) || vehicles[0];
+  const effectiveVehicles = vehicles && vehicles.length > 0 ? vehicles : INITIAL_VEHICLES;
+  const selectedVehicle = effectiveVehicles.find(v => v.id === selectedVehicleId) || effectiveVehicles[0];
 
   // Show Toast
   const triggerToast = (msg: string) => {

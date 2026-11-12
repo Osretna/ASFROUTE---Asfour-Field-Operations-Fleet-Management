@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Vehicle } from '../../types';
+import { INITIAL_VEHICLES } from '../../data/mockData';
 import { VehicleModal } from './VehicleModal';
 import { LiveFleetMissionTracker } from './LiveFleetMissionTracker';
 import { 
@@ -47,22 +48,32 @@ export const FleetManagement: React.FC = () => {
   } = useApp();
   const isAr = language === 'ar';
 
+  const effectiveVehicles = vehicles && vehicles.length > 0 ? vehicles : INITIAL_VEHICLES;
   const [viewMode, setViewMode] = useState<'roster' | 'live_map'>('roster');
-  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle>(vehicles[0] || {} as Vehicle);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>(effectiveVehicles[0]?.id || 'TRK-101');
   const [activeTab, setActiveTab] = useState<'info' | 'telemetry' | 'maintenance' | 'checklist'>('telemetry');
   const [search, setSearch] = useState('');
   const [vehicleModalOpen, setVehicleModalOpen] = useState(false);
   const [vehicleToEdit, setVehicleToEdit] = useState<Vehicle | null>(null);
 
-  const filteredVehicles = vehicles.filter(v => 
-    v.id.toLowerCase().includes(search.toLowerCase()) || 
-    v.plateNumber.includes(search) ||
-    v.model.toLowerCase().includes(search.toLowerCase()) ||
-    (v.driverNameAr && v.driverNameAr.includes(search))
-  );
+  const selectedVehicle = effectiveVehicles.find(v => v.id === selectedVehicleId) || effectiveVehicles[0] || INITIAL_VEHICLES[0];
 
-  const activeOnMissionCount = vehicles.filter(v => v.status === 'on_route' || v.status === 'at_customer').length;
-  const tamperAlertsCount = vehicles.filter(v => v.driverDiligenceStatus && v.driverDiligenceStatus !== 'diligent').length;
+  const filteredVehicles = effectiveVehicles.filter(v => {
+    if (!v) return false;
+    const term = search.toLowerCase().trim();
+    if (!term) return true;
+    return (
+      (v.id && v.id.toLowerCase().includes(term)) || 
+      (v.plateNumber && v.plateNumber.includes(term)) ||
+      (v.plateNumberEn && v.plateNumberEn.toLowerCase().includes(term)) ||
+      (v.model && v.model.toLowerCase().includes(term)) ||
+      (v.driverNameAr && v.driverNameAr.includes(term)) ||
+      (v.driverNameEn && v.driverNameEn.toLowerCase().includes(term))
+    );
+  });
+
+  const activeOnMissionCount = effectiveVehicles.filter(v => v.status === 'on_route' || v.status === 'at_customer').length;
+  const tamperAlertsCount = effectiveVehicles.filter(v => v.driverDiligenceStatus && v.driverDiligenceStatus !== 'diligent').length;
 
   const handleOpenAdd = () => {
     setVehicleToEdit(null);
@@ -84,7 +95,7 @@ export const FleetManagement: React.FC = () => {
 
   const handleLiveTrackVehicle = (v: Vehicle, e: React.MouseEvent) => {
     e.stopPropagation();
-    setSelectedVehicle(v);
+    setSelectedVehicleId(v.id);
     setViewMode('live_map');
   };
 
@@ -226,7 +237,7 @@ export const FleetManagement: React.FC = () => {
                 return (
                   <div
                     key={vehicle.id}
-                    onClick={() => setSelectedVehicle(vehicle)}
+                    onClick={() => setSelectedVehicleId(vehicle.id)}
                     className={`p-4 rounded-xl border transition-all cursor-pointer flex flex-col gap-3 relative group ${
                       isSelected 
                         ? 'bg-slate-900 border-[#C5A45B] shadow-lg shadow-[#C5A45B]/10' 
@@ -450,7 +461,7 @@ export const FleetManagement: React.FC = () => {
                             <span>{isAr ? 'إحداثيات GPS المباشرة:' : 'Live GPS Pin:'}</span>
                           </span>
                           <span className="font-mono text-slate-200">
-                            {selectedVehicle.currentLat.toFixed(4)}, {selectedVehicle.currentLng.toFixed(4)}
+                            {(selectedVehicle.currentLat ?? 30.0382).toFixed(4)}, {(selectedVehicle.currentLng ?? 31.3912).toFixed(4)}
                           </span>
                         </div>
                         {selectedVehicle.missionDestinationAr && (

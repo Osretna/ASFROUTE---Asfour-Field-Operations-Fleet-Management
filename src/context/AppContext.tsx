@@ -192,7 +192,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [vehicles, setVehicles] = useState<Vehicle[]>(() => {
     const saved = localStorage.getItem('asfroute_vehicles');
     if (saved) {
-      try { return JSON.parse(saved); } catch {}
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
     }
     return INITIAL_VEHICLES;
   });
@@ -312,7 +315,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!snapshot.empty) {
         const remoteVehicles: Vehicle[] = [];
         snapshot.forEach(docSnap => {
-          remoteVehicles.push(docSnap.data() as Vehicle);
+          const raw = docSnap.data() as Partial<Vehicle>;
+          const fallback = INITIAL_VEHICLES.find(v => v.id === docSnap.id) || INITIAL_VEHICLES[0];
+          remoteVehicles.push({
+            ...fallback,
+            ...raw,
+            id: docSnap.id || raw.id || fallback.id
+          } as Vehicle);
         });
         if (remoteVehicles.length > 0) {
           setVehicles(remoteVehicles);
