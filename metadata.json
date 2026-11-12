@@ -1,0 +1,6 @@
+{
+  "name": "ASFROUTE - Asfour Field Operations & Fleet Management",
+  "description": "Enterprise Field Service Management, Fleet Operations, and Crystal Chandelier Installation Scheduling System for Asfour Crystal (شركة كريستال عصفور).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
