@@ -91,16 +91,8 @@ export const Sidebar: React.FC = () => {
     },
   ];
 
-  // ONLY visible when Admin is authenticated
+  // ONLY visible when Admin is authenticated - Admin Control Hub
   if (isAdminAuthenticated) {
-    NAV_ITEMS.push({
-      id: 'architecture',
-      labelAr: 'هندسة النظام وقواعد البيانات',
-      labelEn: 'System Architecture & Schema',
-      icon: Database,
-      badge: 'SCHEMA',
-      badgeType: 'amber'
-    });
     NAV_ITEMS.push({
       id: 'admin',
       labelAr: 'لوحة تحكم الأدمن والربط السحابي',

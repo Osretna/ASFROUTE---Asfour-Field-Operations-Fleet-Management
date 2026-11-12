@@ -1,7 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { WorkOrder, WorkOrderType, WorkOrderStatus, SkillLevel } from '../../types';
-import { FileCheck, X, Save, Sparkles, ShieldCheck } from 'lucide-react';
+import { WorkOrder } from '../../types';
+import { EGYPT_GOVERNORATES, autoDetectEgyptCoordinates } from '../../utils/egyptGeocoding';
+import { 
+  FileCheck, 
+  X, 
+  Save, 
+  MapPin, 
+  Sparkles, 
+  Truck, 
+  Calendar, 
+  CheckCircle2, 
+  Loader2,
+  Navigation
+} from 'lucide-react';
 
 interface WorkOrderModalProps {
   orderToEdit?: WorkOrder | null;
@@ -11,353 +23,336 @@ interface WorkOrderModalProps {
 export const WorkOrderModal: React.FC<WorkOrderModalProps> = ({ orderToEdit, onClose }) => {
   const { language, addWorkOrder, updateWorkOrder, vehicles, teams } = useApp();
   const isAr = language === 'ar';
-
   const isEditing = !!orderToEdit;
 
-  const [formData, setFormData] = useState<Partial<WorkOrder>>(() => {
-    if (orderToEdit) return { ...orderToEdit };
-    return {
-      id: `WO-2026-${Math.floor(880 + Math.random() * 100)}`,
-      orderNumber: `ASF-EG-${Math.floor(88000 + Math.random() * 1000)}`,
-      type: 'grand_chandelier',
-      status: 'scheduled',
-      customerNameAr: 'قصر الأمير عبد العزيز - التجمع الخامس',
-      customerNameEn: 'Prince Abdulaziz Palace - 5th Settlement',
-      customerPhone: '+20 100 892 4110',
-      customerType: 'VIP Residential',
-      locationNameAr: 'شارع التسعين الجنوبي، فيلا 14',
-      locationNameEn: 'South 90th St, Villa 14',
-      governorate: 'Cairo / New Cairo',
-      coordinates: [30.0125, 31.4820],
-      scheduledDate: '2026-11-13',
-      timeWindowStart: '09:00',
-      timeWindowEnd: '15:00',
-      estimatedDurationHours: 6.0,
+  const [customerName, setCustomerName] = useState(
+    orderToEdit?.customerNameAr || orderToEdit?.customerNameEn || ''
+  );
+  const [customerPhone, setCustomerPhone] = useState(orderToEdit?.customerPhone || '010');
+  const [selectedGov, setSelectedGov] = useState<string>(() => {
+    if (orderToEdit?.governorate) {
+      const match = EGYPT_GOVERNORATES.find(g => orderToEdit.governorate.includes(g.nameAr) || orderToEdit.governorate.includes(g.nameEn));
+      if (match) return match.nameAr;
+    }
+    return 'القاهرة';
+  });
+  const [address, setAddress] = useState(
+    orderToEdit?.locationNameAr || orderToEdit?.locationNameEn || ''
+  );
+  const [coordinates, setCoordinates] = useState<[number, number]>(
+    orderToEdit?.coordinates || [30.0125, 31.4820]
+  );
+  const [chandelierModel, setChandelierModel] = useState(
+    orderToEdit?.chandelier.modelNameAr || 'ثريا فرساي الملكية المطلية بماء الذهب'
+  );
+  const [scheduledDate, setScheduledDate] = useState(
+    orderToEdit?.scheduledDate || new Date().toISOString().split('T')[0]
+  );
+  const [timeWindow, setTimeWindow] = useState(
+    orderToEdit?.timeWindowStart ? `${orderToEdit.timeWindowStart} - ${orderToEdit.timeWindowEnd}` : '09:00 - 14:00'
+  );
+  const [assignedVehicleId, setAssignedVehicleId] = useState(
+    orderToEdit?.assignedVehicleId || vehicles[0]?.id || 'TRK-101'
+  );
+
+  const [isGeocoding, setIsGeocoding] = useState(false);
+  const [autoDetectedNotice, setAutoDetectedNotice] = useState(false);
+
+  // Auto-detect coordinates whenever the governorate or address changes
+  useEffect(() => {
+    if (!address.trim() && !selectedGov) return;
+
+    let isMounted = true;
+    const timer = setTimeout(async () => {
+      setIsGeocoding(true);
+      try {
+        const detected = await autoDetectEgyptCoordinates(address || selectedGov, selectedGov);
+        if (isMounted) {
+          setCoordinates(detected);
+          setAutoDetectedNotice(true);
+          setTimeout(() => {
+            if (isMounted) setAutoDetectedNotice(false);
+          }, 2500);
+        }
+      } catch {
+        // Fallback
+      } finally {
+        if (isMounted) setIsGeocoding(false);
+      }
+    }, 450);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [address, selectedGov]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const [startH, endH] = timeWindow.split('-').map(s => s.trim());
+
+    const finalOrder: WorkOrder = {
+      ...(orderToEdit || {}),
+      id: orderToEdit?.id || `WO-2026-${Math.floor(880 + Math.random() * 100)}`,
+      orderNumber: orderToEdit?.orderNumber || `ASF-EG-${Math.floor(88000 + Math.random() * 1000)}`,
+      type: orderToEdit?.type || 'grand_chandelier',
+      status: orderToEdit?.status || 'scheduled',
+      customerNameAr: customerName.trim(),
+      customerNameEn: customerName.trim(),
+      customerPhone: customerPhone.trim(),
+      customerType: orderToEdit?.customerType || 'VIP Residential',
+      locationNameAr: address.trim() || selectedGov,
+      locationNameEn: address.trim() || selectedGov,
+      governorate: selectedGov,
+      coordinates: coordinates,
+      scheduledDate: scheduledDate,
+      timeWindowStart: startH || '09:00',
+      timeWindowEnd: endH || '14:00',
+      estimatedDurationHours: 4.5,
       requiredSkillLevel: 5,
       requiredTechniciansCount: 3,
       requiresPneumaticTruck: true,
       requiresCraneLift: true,
-      assignedVehicleId: vehicles[0]?.id || 'TRK-101',
-      assignedTeamId: teams[0]?.id || 'TEAM-GOLD-01',
+      assignedVehicleId: assignedVehicleId,
+      assignedTeamId: orderToEdit?.assignedTeamId || teams[0]?.id || 'TEAM-GOLD-01',
       anchorTestPassed: true,
       scaffoldingHeightM: 8.5,
-      notesAr: 'تركيب ثريا لوتس مذهبة مع تدقيق توازن البلورات',
-      notesEn: 'Lotus gilded chandelier assembly with precision crystal balancing',
-      certificateNumber: `ASF-CERT-2026-${Math.floor(10000 + Math.random() * 90000)}`,
-      chandelier: {
-        modelNumber: 'ASF-VERSAILLES-GOLD-75',
-        modelNameAr: 'ثريا فرساي الملكية المطلية بماء الذهب',
-        modelNameEn: 'Versailles 24K Gold Crystal Masterpiece',
+      notesAr: `تركيب بمحافظة ${selectedGov}`,
+      notesEn: `Installation at ${selectedGov}`,
+      customerLocationConfirmed: true,
+      receivedLocationNote: isAr ? 'تم تحديد الموقع آلياً من العنوان' : 'Auto-geocoded from address',
+      chandelier: orderToEdit?.chandelier || {
+        modelNumber: 'ASF-LUXURY-75',
+        modelNameAr: chandelierModel.trim(),
+        modelNameEn: chandelierModel.trim(),
         crystalCutType: 'Asfour 30% PbO Full Lead',
-        weightKg: 520,
-        diameterCm: 280,
-        heightCm: 340,
+        weightKg: 480,
+        diameterCm: 260,
+        heightCm: 320,
         layersCount: 5,
-        totalCrystalPrisms: 5400,
-        requiredCeilingLoadCapacityKg: 1600,
-        minimumCeilingHeightM: 6.5,
+        totalCrystalPrisms: 4800,
+        requiredCeilingLoadCapacityKg: 1500,
+        minimumCeilingHeightM: 6.0,
         installationFragilityTier: 'Ultra-Delicate Masterpiece'
       }
     };
-  });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isEditing && orderToEdit) {
-      updateWorkOrder(formData as WorkOrder);
+    if (isEditing) {
+      updateWorkOrder(finalOrder);
     } else {
-      addWorkOrder(formData as WorkOrder);
+      addWorkOrder(finalOrder);
     }
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-[#0D131F] border-2 border-slate-300 dark:border-slate-700/80 rounded-3xl max-w-2xl w-full p-6 shadow-2xl text-slate-800 dark:text-slate-100 flex flex-col gap-4 max-h-[92vh] overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-[#C5A45B]/20 border border-[#C5A45B]/40 flex items-center justify-center text-[#DFBA6B]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
+      <div className="bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl text-slate-800 dark:text-slate-100 flex flex-col gap-5 transition-colors">
+        
+        {/* Simple & Clean Header */}
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/80">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#C5A45B]/15 border border-[#C5A45B]/30 flex items-center justify-center text-[#8E6A23] dark:text-[#DFBA6B]">
               <FileCheck className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white">
-                {isEditing ? (isAr ? 'تعديل أمر العمل' : 'Edit Work Order') : (isAr ? 'إنشاء أمر عمل وتركيب جديد' : 'Create New Chandelier Work Order')}
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                {isEditing ? (isAr ? 'تعديل بيانات العميل والموقع' : 'Edit Order & Location') : (isAr ? 'إضافة عميل وموقع تركيب جديد' : 'New Client & Installation')}
               </h2>
-              <span className="text-xs text-slate-400 font-mono">
-                {formData.orderNumber}
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                {isAr ? 'إدخال بسيط وسريع مع تحديد الموقع آلياً على الخريطة' : 'Simple data entry with automatic GPS map pin detection'}
               </span>
             </div>
           </div>
 
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">
+          <button 
+            onClick={onClose} 
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto flex flex-col gap-4 text-xs pr-1">
-          {/* Customer info */}
-          <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 flex flex-col gap-3">
-            <span className="font-bold text-slate-300 uppercase tracking-wider text-[11px]">
-              {isAr ? 'بيانات العميل والموقع:' : 'CUSTOMER & SITE INFORMATION:'}
-            </span>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-slate-400">{isAr ? 'اسم العميل (عربي):' : 'Customer Name (AR):'}</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.customerNameAr}
-                  onChange={(e) => setFormData({ ...formData, customerNameAr: e.target.value })}
-                  className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-100 outline-none focus:border-[#C5A45B]"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-slate-400">{isAr ? 'اسم العميل (إنجليزي):' : 'Customer Name (EN):'}</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.customerNameEn}
-                  onChange={(e) => setFormData({ ...formData, customerNameEn: e.target.value })}
-                  className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-100 outline-none focus:border-[#C5A45B]"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-slate-400">{isAr ? 'الهاتف:' : 'Phone:'}</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.customerPhone}
-                  onChange={(e) => setFormData({ ...formData, customerPhone: e.target.value })}
-                  className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-100 font-mono outline-none focus:border-[#C5A45B]"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-slate-400">{isAr ? 'تصنيف العميل:' : 'Customer Type:'}</label>
-                <select
-                  value={formData.customerType}
-                  onChange={(e) => setFormData({ ...formData, customerType: e.target.value as any })}
-                  className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-100 outline-none focus:border-[#C5A45B]"
-                >
-                  <option value="VIP Residential">VIP Residential</option>
-                  <option value="Luxury Hotel">Luxury Hotel</option>
-                  <option value="Royal/State Palace">Royal/State Palace</option>
-                  <option value="Mosque/Cathedral">Mosque/Cathedral</option>
-                  <option value="Commercial Flagship">Commercial Flagship</option>
-                </select>
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-slate-400">{isAr ? 'المحافظة:' : 'Governorate:'}</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.governorate}
-                  onChange={(e) => setFormData({ ...formData, governorate: e.target.value })}
-                  className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-100 outline-none focus:border-[#C5A45B]"
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-slate-500 dark:text-slate-400">{isAr ? 'عنوان الموقع بالتفصيل:' : 'Site Location Address:'}</label>
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-xs">
+          {/* Customer Name & Phone */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="font-semibold text-slate-700 dark:text-slate-300">
+                {isAr ? 'اسم العميل:' : 'Customer Name:'}
+              </label>
               <input
                 type="text"
                 required
-                value={formData.locationNameAr}
-                onChange={(e) => setFormData({ ...formData, locationNameAr: e.target.value, locationNameEn: e.target.value })}
-                className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-slate-900 dark:text-slate-100 outline-none focus:border-[#C5A45B]"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                placeholder={isAr ? 'مثال: فيلا المستشار أحمد فؤاد' : 'e.g. Prince Villa'}
+                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:border-[#C5A45B] transition-colors"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <div className="flex flex-col gap-1">
-                <label className="text-slate-500 dark:text-slate-400 font-mono text-[11px]">{isAr ? 'خط العرض (Latitude):' : 'Latitude:'}</label>
-                <input
-                  type="number"
-                  step="0.0001"
-                  value={formData.coordinates?.[0] || 30.0125}
-                  onChange={(e) => setFormData({ ...formData, coordinates: [parseFloat(e.target.value) || 30.0125, formData.coordinates?.[1] || 31.4820] })}
-                  className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-slate-900 dark:text-slate-100 font-mono text-xs outline-none focus:border-[#C5A45B]"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-slate-500 dark:text-slate-400 font-mono text-[11px]">{isAr ? 'خط الطول (Longitude):' : 'Longitude:'}</label>
-                <input
-                  type="number"
-                  step="0.0001"
-                  value={formData.coordinates?.[1] || 31.4820}
-                  onChange={(e) => setFormData({ ...formData, coordinates: [formData.coordinates?.[0] || 30.0125, parseFloat(e.target.value) || 31.4820] })}
-                  className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-slate-900 dark:text-slate-100 font-mono text-xs outline-none focus:border-[#C5A45B]"
-                />
-              </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="font-semibold text-slate-700 dark:text-slate-300">
+                {isAr ? 'رقم الهاتف / الواتساب:' : 'Phone / WhatsApp:'}
+              </label>
+              <input
+                type="text"
+                required
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                placeholder="01008924110"
+                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 text-xs font-mono text-slate-900 dark:text-slate-100 outline-none focus:border-[#C5A45B] transition-colors"
+              />
             </div>
           </div>
 
-          {/* Chandelier Physical Specifications */}
-          <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 flex flex-col gap-3">
-            <span className="font-bold text-[#DFBA6B] uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4" />
-              <span>{isAr ? 'مواصفات الثريا الكريستالية والأوزان:' : 'CHANDELIER SPECIFICATIONS & LOAD:'}</span>
-            </span>
+          {/* Governorate Dropdown & Address Auto-Geocoding */}
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                <MapPin className="w-4 h-4 text-[#C5A45B]" />
+                <span>{isAr ? 'الموقع والعنوان (تحديد الخريطة تلقائياً)' : 'Address & Auto GPS Detection'}</span>
+              </span>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-slate-400">{isAr ? 'اسم وموديل الثريا:' : 'Chandelier Model Name:'}</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.chandelier?.modelNameAr}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    chandelier: { ...formData.chandelier!, modelNameAr: e.target.value, modelNameEn: e.target.value }
-                  })}
-                  className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-100 outline-none focus:border-[#C5A45B]"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-slate-400">{isAr ? 'كود الموديل:' : 'Model Code:'}</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.chandelier?.modelNumber}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    chandelier: { ...formData.chandelier!, modelNumber: e.target.value }
-                  })}
-                  className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-100 font-mono outline-none focus:border-[#C5A45B]"
-                />
-              </div>
+              {isGeocoding ? (
+                <span className="text-[10px] text-blue-500 flex items-center gap-1 font-mono">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  {isAr ? 'جاري تحديد الإحداثيات...' : 'Locating...'}
+                </span>
+              ) : (
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-mono font-semibold">
+                  <CheckCircle2 className="w-3 h-3" />
+                  {isAr ? 'الموقع محدد' : 'Pin Ready'}
+                </span>
+              )}
             </div>
 
-            <div className="grid grid-cols-4 gap-2">
-              <div className="flex flex-col gap-1">
-                <label className="text-slate-400">{isAr ? 'الوزن (كجم):' : 'Weight (kg):'}</label>
-                <input
-                  type="number"
-                  required
-                  value={formData.chandelier?.weightKg}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    chandelier: { ...formData.chandelier!, weightKg: parseInt(e.target.value) || 0 }
-                  })}
-                  className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-100 font-mono outline-none focus:border-[#C5A45B]"
-                />
+            {/* Egypt Governorates Dropdown */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
+                {isAr ? 'اختر المحافظة (قائمة محافظات مصر):' : 'Select Governorate (Egypt):'}
+              </label>
+              <select
+                value={selectedGov}
+                onChange={(e) => setSelectedGov(e.target.value)}
+                className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-semibold text-slate-900 dark:text-slate-100 outline-none focus:border-[#C5A45B]"
+              >
+                {EGYPT_GOVERNORATES.map(gov => (
+                  <option key={gov.id} value={gov.nameAr}>
+                    {isAr ? gov.nameAr : gov.nameEn}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Address input with smart detection */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
+                {isAr ? 'العنوان الذي أخبرك به العميل:' : 'Detailed Address:'}
+              </label>
+              <input
+                type="text"
+                required
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder={isAr ? 'مثال: التجمع الخامس شارع التسعين الجنوبي فيلا 14' : 'e.g. 5th Settlement, South 90th St'}
+                className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:border-[#C5A45B]"
+              />
+            </div>
+
+            {/* Auto-detected Coordinates Live Badge */}
+            <div className="flex items-center justify-between text-[11px] bg-white dark:bg-slate-950 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-1.5 font-mono text-slate-600 dark:text-slate-300">
+                <Navigation className="w-3.5 h-3.5 text-emerald-500" />
+                <span>{coordinates[0].toFixed(4)}, {coordinates[1].toFixed(4)}</span>
               </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-slate-400">{isAr ? 'عدد البلورات:' : 'Prisms Count:'}</label>
-                <input
-                  type="number"
-                  required
-                  value={formData.chandelier?.totalCrystalPrisms}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    chandelier: { ...formData.chandelier!, totalCrystalPrisms: parseInt(e.target.value) || 0 }
-                  })}
-                  className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-100 font-mono outline-none focus:border-[#C5A45B]"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-slate-400">{isAr ? 'قوة المرساة (كجم):' : 'Anchor Load (kg):'}</label>
-                <input
-                  type="number"
-                  required
-                  value={formData.chandelier?.requiredCeilingLoadCapacityKg}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    chandelier: { ...formData.chandelier!, requiredCeilingLoadCapacityKg: parseInt(e.target.value) || 0 }
-                  })}
-                  className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-100 font-mono outline-none focus:border-[#C5A45B]"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-slate-400">{isAr ? 'ارتفاع السقالة (م):' : 'Scaffold (m):'}</label>
-                <input
-                  type="number"
-                  step="0.5"
-                  required
-                  value={formData.scaffoldingHeightM}
-                  onChange={(e) => setFormData({ ...formData, scaffoldingHeightM: parseFloat(e.target.value) || 0 })}
-                  className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-100 font-mono outline-none focus:border-[#C5A45B]"
-                />
-              </div>
+              <span className="text-[10px] text-slate-400">
+                {isAr ? 'إحداثيات الماب الحقيقية' : 'Real Map Coordinates'}
+              </span>
             </div>
           </div>
 
-          {/* Logistics & Scheduling */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-slate-400">{isAr ? 'تاريخ التنفيذ:' : 'Date:'}</label>
+          {/* Chandelier Model & Truck Allocation */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="font-semibold text-slate-700 dark:text-slate-300">
+                {isAr ? 'اسم وموديل الثريا:' : 'Chandelier Model:'}
+              </label>
+              <input
+                type="text"
+                required
+                value={chandelierModel}
+                onChange={(e) => setChandelierModel(e.target.value)}
+                placeholder={isAr ? 'ثريا فرساي الملكية' : 'Versailles Chandelier'}
+                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:border-[#C5A45B]"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="font-semibold text-slate-700 dark:text-slate-300">
+                {isAr ? 'شاحنة النقل:' : 'Assigned Truck:'}
+              </label>
+              <select
+                value={assignedVehicleId}
+                onChange={(e) => setAssignedVehicleId(e.target.value)}
+                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:border-[#C5A45B]"
+              >
+                {vehicles.map(v => (
+                  <option key={v.id} value={v.id}>
+                    {v.id} · {v.plateNumber} ({v.model.split(' ')[0]})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Date & Time */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="font-semibold text-slate-700 dark:text-slate-300">
+                {isAr ? 'تاريخ التركيب:' : 'Scheduled Date:'}
+              </label>
               <input
                 type="date"
                 required
-                value={formData.scheduledDate}
-                onChange={(e) => setFormData({ ...formData, scheduledDate: e.target.value })}
-                className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-100 font-mono outline-none focus:border-[#C5A45B]"
+                value={scheduledDate}
+                onChange={(e) => setScheduledDate(e.target.value)}
+                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:border-[#C5A45B] font-mono"
               />
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-slate-400">{isAr ? 'ساعات البداية والنهاية:' : 'Time Window:'}</label>
-              <div className="flex items-center gap-1">
-                <input
-                  type="text"
-                  value={formData.timeWindowStart}
-                  onChange={(e) => setFormData({ ...formData, timeWindowStart: e.target.value })}
-                  className="w-1/2 bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-100 font-mono text-center"
-                />
-                <input
-                  type="text"
-                  value={formData.timeWindowEnd}
-                  onChange={(e) => setFormData({ ...formData, timeWindowEnd: e.target.value })}
-                  className="w-1/2 bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-100 font-mono text-center"
-                />
-              </div>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-slate-400">{isAr ? 'شاحنة النقل:' : 'Truck:'}</label>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="font-semibold text-slate-700 dark:text-slate-300">
+                {isAr ? 'فترة التوصيل:' : 'Time Window:'}
+              </label>
               <select
-                value={formData.assignedVehicleId}
-                onChange={(e) => setFormData({ ...formData, assignedVehicleId: e.target.value })}
-                className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-100 outline-none focus:border-[#C5A45B]"
+                value={timeWindow}
+                onChange={(e) => setTimeWindow(e.target.value)}
+                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:border-[#C5A45B]"
               >
-                {vehicles.map(v => (
-                  <option key={v.id} value={v.id}>{v.id} · {v.plateNumber}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-slate-400">{isAr ? 'فريق التركيب:' : 'Team:'}</label>
-              <select
-                value={formData.assignedTeamId}
-                onChange={(e) => setFormData({ ...formData, assignedTeamId: e.target.value })}
-                className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-100 outline-none focus:border-[#C5A45B]"
-              >
-                {teams.map(t => (
-                  <option key={t.id} value={t.id}>{isAr ? t.nameAr : t.nameEn}</option>
-                ))}
+                <option value="09:00 - 13:00">09:00 - 13:00 (صباحي)</option>
+                <option value="13:00 - 17:00">13:00 - 17:00 (بعد الظهر)</option>
+                <option value="17:00 - 21:00">17:00 - 21:00 (مسائي)</option>
               </select>
             </div>
           </div>
 
-          {/* Actions */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+          {/* Action Buttons */}
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800/80">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              className="px-4 py-2 rounded-xl text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer font-medium"
             >
               {isAr ? 'إلغاء' : 'Cancel'}
             </button>
             <button
               type="submit"
-              className="px-5 py-2.5 rounded-xl font-bold bg-[#C5A45B] hover:bg-[#D4B36A] text-[#0D131D] flex items-center gap-1.5 shadow-lg shadow-[#C5A45B]/20 cursor-pointer"
+              className="px-5 py-2.5 rounded-xl font-bold bg-[#C5A45B] hover:bg-[#D4B36A] text-[#0D131D] flex items-center gap-1.5 shadow-lg shadow-[#C5A45B]/20 cursor-pointer transition-transform active:scale-95"
             >
               <Save className="w-4 h-4" />
-              <span>{isEditing ? (isAr ? 'حفظ التعديلات' : 'Save Changes') : (isAr ? 'تسجيل أمر العمل والجدولة' : 'Create & Schedule Order')}</span>
+              <span>{isEditing ? (isAr ? 'حفظ التعديلات' : 'Save Changes') : (isAr ? 'تثبيت وحفظ أمر العمل' : 'Save & Confirm Order')}</span>
             </button>
           </div>
         </form>

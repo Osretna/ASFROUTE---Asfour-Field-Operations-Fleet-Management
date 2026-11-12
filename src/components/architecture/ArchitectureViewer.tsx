@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Database, Cpu, Network, Map, FileCode, Check, Copy } from 'lucide-react';
 
-export const ArchitectureViewer: React.FC = () => {
+export const ArchitectureViewer: React.FC<{ isEmbedded?: boolean }> = ({ isEmbedded = false }) => {
   const { language } = useApp();
   const isAr = language === 'ar';
 
@@ -175,7 +175,9 @@ class AsfourCrystalDispatcher:
         return solution`;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden p-6 max-w-7xl mx-auto w-full gap-5 text-slate-100">
+    <div className={`flex flex-col overflow-hidden w-full gap-5 text-slate-100 ${
+      isEmbedded ? 'h-full' : 'h-full p-6 max-w-7xl mx-auto'
+    }`}>
       {/* Header */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <div>

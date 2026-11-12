@@ -3,23 +3,18 @@ import { useApp } from '../../context/AppContext';
 import { GanttChart } from './GanttChart';
 import { LiveOperationsMap } from './LiveOperationsMap';
 import { ReassignModal } from './ReassignModal';
-import { Vehicle, InstallationTeam, WorkOrder, GanttTaskBlock } from '../../types';
+import { WorkOrder, GanttTaskBlock } from '../../types';
 import { 
   Compass, 
   Truck, 
   Users, 
   Plus, 
-  FileSpreadsheet, 
-  Printer, 
-  Filter, 
-  Search, 
+  MapPin, 
   Sparkles, 
-  ChevronRight, 
-  ShieldCheck,
-  Maximize2,
-  Minimize2,
   Calendar,
-  MessageSquare
+  Layers,
+  Map as MapIcon,
+  Maximize2
 } from 'lucide-react';
 
 import { WorkOrderModal } from '../workorders/WorkOrderModal';
@@ -39,27 +34,9 @@ export const DispatchCenter: React.FC = () => {
 
   const isAr = language === 'ar';
 
-  const [resourceFilter, setResourceFilter] = useState<'all' | 'vehicles' | 'teams'>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'available'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<'map' | 'gantt' | 'split'>('map');
   const [reassignModalWo, setReassignModalWo] = useState<WorkOrder | null>(null);
   const [workOrderModalOpen, setWorkOrderModalOpen] = useState(false);
-  const [mapCollapsed, setMapCollapsed] = useState(false);
-
-  // Filter resources
-  const filteredVehicles = vehicles.filter(v => {
-    if (statusFilter === 'active' && v.status !== 'on_route' && v.status !== 'at_customer') return false;
-    if (statusFilter === 'available' && v.status !== 'available') return false;
-    if (searchQuery && !v.id.toLowerCase().includes(searchQuery.toLowerCase()) && !v.model.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    return true;
-  });
-
-  const filteredTeams = teams.filter(t => {
-    if (statusFilter === 'active' && t.status !== 'deployed') return false;
-    if (statusFilter === 'available' && t.status !== 'ready') return false;
-    if (searchQuery && !t.nameAr.includes(searchQuery) && !t.nameEn.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    return true;
-  });
 
   const handleSelectGanttBlock = (block: GanttTaskBlock) => {
     const wo = workOrders.find(w => w.id === block.workOrderId);
@@ -70,216 +47,192 @@ export const DispatchCenter: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-slate-50 dark:bg-[#0A0E17] text-slate-800 dark:text-slate-100 transition-colors duration-200">
-      {/* Dispatch Center Top Action Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 bg-white dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 shadow-sm">
+    <div className="flex flex-col h-full overflow-hidden bg-slate-50 dark:bg-[#0A0E17] text-slate-800 dark:text-slate-100 transition-colors">
+      {/* Top Action & View Switcher Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 bg-white dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[#C5A45B]/20 border border-[#C5A45B]/40 flex items-center justify-center text-[#8E6A23] dark:text-[#DFBA6B]">
+          <div className="w-8 h-8 rounded-xl bg-[#C5A45B]/15 border border-[#C5A45B]/30 flex items-center justify-center text-[#8E6A23] dark:text-[#DFBA6B]">
             <Compass className="w-4 h-4" />
           </div>
           <div>
             <h1 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <span>{isAr ? 'مركز الجدولة والتحكم الميداني (ديسباتشر كونسول)' : 'Dispatcher Console & Live Operations'}</span>
-              <span className="text-[10px] font-mono bg-[#C5A45B]/20 text-[#8E6A23] dark:text-[#DFBA6B] px-1.5 py-0.5 rounded border border-[#C5A45B]/40 font-bold">
-                SALESFORCE / ORACLE FSM TIER
-              </span>
+              <span>{isAr ? 'مركز الجدولة والملاحة الميدانية' : 'Dispatch & Navigation Hub'}</span>
             </h1>
             <span className="text-[11px] text-slate-500 dark:text-slate-400">
-              {isAr ? 'تزامن ثلاثي: قائمة الموارد · مخطط جانت التفاعلي · خريطة الملاحة الحية التفاعلية' : '3-Panel Layout: Resource Dock · Gantt Timeline · Interactive Live Navigation Radar'}
+              {isAr ? 'تتبع مواقع العملاء الحية ومسارات الشاحنات بدقة عالية' : 'Live customer GPS pins & fleet dispatch navigation'}
             </span>
           </div>
         </div>
 
-        {/* Global Dispatch Actions */}
-        <div className="flex items-center gap-2">
+        {/* View Switcher: Map (Spacious) | Gantt | Split */}
+        <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
           <button
-            onClick={() => setWorkOrderModalOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-[#C5A45B] hover:bg-[#D4B36A] text-[#0D131D] transition-transform active:scale-95 shadow-md shadow-[#C5A45B]/20 cursor-pointer"
+            onClick={() => setViewMode('map')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+              viewMode === 'map' 
+                ? 'bg-[#C5A45B] text-[#0D131D] shadow-sm' 
+                : 'text-slate-600 dark:text-slate-400 hover:text-black dark:hover:text-white'
+            }`}
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>{isAr ? 'إضافة أمر عمل جديد' : 'New Work Order'}</span>
+            <MapIcon className="w-3.5 h-3.5" />
+            <span>{isAr ? 'الخريطة المباشرة الواسعة' : 'Live Map'}</span>
           </button>
 
           <button
-            onClick={() => setReassignModalWo(workOrders[0])}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
+            onClick={() => setViewMode('gantt')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+              viewMode === 'gantt' 
+                ? 'bg-[#C5A45B] text-[#0D131D] shadow-sm' 
+                : 'text-slate-600 dark:text-slate-400 hover:text-black dark:hover:text-white'
+            }`}
           >
-            <span>{isAr ? 'جدولة يدوية / استبدال' : 'Manual Assign / Swap'}</span>
+            <Calendar className="w-3.5 h-3.5" />
+            <span>{isAr ? 'مخطط المواعيد (Gantt)' : 'Timeline'}</span>
+          </button>
+
+          <button
+            onClick={() => setViewMode('split')}
+            className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+              viewMode === 'split' 
+                ? 'bg-[#C5A45B] text-[#0D131D] shadow-sm' 
+                : 'text-slate-600 dark:text-slate-400 hover:text-black dark:hover:text-white'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>{isAr ? 'عرض مزدوج' : 'Split'}</span>
+          </button>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setWorkOrderModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-[#C5A45B] hover:bg-[#D4B36A] text-[#0D131D] shadow-sm shadow-[#C5A45B]/20 transition-transform active:scale-95 cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>{isAr ? 'إضافة عميل / موقع' : 'New Order'}</span>
           </button>
 
           <button
             onClick={runAutoScheduleOptimizer}
             disabled={isOptimizing}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-[#C5A45B] hover:bg-[#D4B36A] text-[#0D131D] transition-transform active:scale-95 shadow-md shadow-[#C5A45B]/20 cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
           >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>{isOptimizing ? (isAr ? 'تحسين المسارات...' : 'Solving...') : (isAr ? 'تحسين ذكي (OR-Tools)' : 'Auto-Optimize')}</span>
-          </button>
-
-          <div className="h-4 w-px bg-slate-300 dark:bg-slate-800 mx-1" />
-
-          <button
-            onClick={() => setMapCollapsed(!mapCollapsed)}
-            className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs flex items-center gap-1 cursor-pointer"
-            title={mapCollapsed ? "Expand Map" : "Collapse Map"}
-          >
-            {mapCollapsed ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
+            <Sparkles className="w-3.5 h-3.5 text-[#C5A45B]" />
+            <span>{isOptimizing ? (isAr ? 'تحسين المسار...' : 'Optimizing...') : (isAr ? 'تحسين ذكي' : 'Optimize')}</span>
           </button>
         </div>
       </div>
 
-      {/* 3-Panel Main Layout Container */}
+      {/* Spacious Main Workspace */}
       <div className="flex-1 flex overflow-hidden p-3 gap-3">
-        {/* Panel 1: Left Resource Dock (Vehicles + Teams) */}
-        <div className="w-72 shrink-0 bg-white dark:bg-[#0B0F17] rounded-2xl border border-slate-200 dark:border-slate-800/90 flex flex-col overflow-hidden shadow-lg">
-          {/* Resource Dock Header */}
-          <div className="p-3 bg-slate-50 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 flex flex-col gap-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                <Truck className="w-3.5 h-3.5 text-[#C5A45B]" />
-                <span>{isAr ? 'الموارد المتاحة' : 'Fleet & Teams Dock'}</span>
-              </span>
-              <span className="text-[10px] font-mono text-slate-400">
-                {filteredVehicles.length + filteredTeams.length} units
-              </span>
+        {/* VIEW 1: Full Spacious Live Map with Quick Dock */}
+        {viewMode === 'map' && (
+          <div className="flex-1 flex flex-col md:flex-row gap-3 overflow-hidden">
+            {/* Quick Customer Location List on Left */}
+            <div className="w-full md:w-80 shrink-0 bg-white dark:bg-[#0B0F17] rounded-2xl border border-slate-200 dark:border-slate-800/90 flex flex-col overflow-hidden shadow-sm">
+              <div className="p-3 bg-slate-50 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4 text-[#C5A45B]" />
+                  <span>{isAr ? 'قائمة العملاء والمواقع' : 'Clients & Sites'}</span>
+                </span>
+                <span className="text-[10px] font-mono text-slate-400 bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded">
+                  {workOrders.length} {isAr ? 'موقع' : 'sites'}
+                </span>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-2.5 flex flex-col gap-2">
+                {workOrders.map(wo => {
+                  const hasLocation = wo.customerLocationConfirmed;
+                  const isEnRoute = wo.status === 'en_route';
+
+                  return (
+                    <div
+                      key={wo.id}
+                      onClick={() => {
+                        setSelectedWorkOrder(wo);
+                        openDetailModal('work_order', wo);
+                      }}
+                      className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80 hover:border-[#C5A45B]/60 transition-all cursor-pointer flex flex-col gap-1.5 shadow-sm"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                          {isAr ? wo.customerNameAr : wo.customerNameEn}
+                        </span>
+                        <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border ${
+                          isEnRoute 
+                            ? 'bg-blue-500/15 text-blue-600 dark:text-blue-300 border-blue-500/30'
+                            : hasLocation 
+                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                            : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                        }`}>
+                          {isEnRoute ? (isAr ? 'بالطريق' : 'En Route') : hasLocation ? (isAr ? 'محدد' : 'Pinned') : (isAr ? 'بانتظار' : 'Pending')}
+                        </span>
+                      </div>
+
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate flex items-center gap-1">
+                        <MapPin className="w-3 h-3 text-[#C5A45B] shrink-0" />
+                        <span className="truncate">{wo.governorate} · {isAr ? wo.locationNameAr : wo.locationNameEn}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
-            {/* Search Input */}
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute top-2.5 left-2.5" />
-              <input
-                type="text"
-                placeholder={isAr ? 'بحث برقم الشاحنة أو الفريق...' : 'Search plate, team...'}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 outline-none focus:border-[#C5A45B]"
+            {/* Live Leaflet Map Container */}
+            <div className="flex-1 flex flex-col overflow-hidden rounded-2xl shadow-md">
+              <LiveOperationsMap
+                onSelectWorkOrder={(wo) => {
+                  setSelectedWorkOrder(wo);
+                  openDetailModal('work_order', wo);
+                }}
+                onSelectVehicle={(v) => {
+                  setSelectedVehicle(v);
+                  openDetailModal('vehicle', v);
+                }}
               />
             </div>
-
-            {/* Filter Pills */}
-            <div className="flex items-center gap-1 p-0.5 bg-slate-100 dark:bg-slate-950 rounded-lg border border-slate-200 dark:border-slate-800 text-[10px]">
-              <button
-                onClick={() => setStatusFilter('all')}
-                className={`flex-1 py-1 rounded text-center transition-colors cursor-pointer ${
-                  statusFilter === 'all' ? 'bg-[#C5A45B] text-[#0D131D] font-bold' : 'text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white'
-                }`}
-              >
-                {isAr ? 'الكل' : 'All'}
-              </button>
-              <button
-                onClick={() => setStatusFilter('active')}
-                className={`flex-1 py-1 rounded text-center transition-colors cursor-pointer ${
-                  statusFilter === 'active' ? 'bg-[#C5A45B] text-[#0D131D] font-bold' : 'text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white'
-                }`}
-              >
-                {isAr ? 'نشط' : 'Active'}
-              </button>
-              <button
-                onClick={() => setStatusFilter('available')}
-                className={`flex-1 py-1 rounded text-center transition-colors cursor-pointer ${
-                  statusFilter === 'available' ? 'bg-[#C5A45B] text-[#0D131D] font-bold' : 'text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white'
-                }`}
-              >
-                {isAr ? 'متاح' : 'Idle'}
-              </button>
-            </div>
           </div>
+        )}
 
-          {/* Resources Scrollable List */}
-          <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-2">
-            {/* Trucks Section */}
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-2 py-1">
-              {isAr ? 'شاحنات نقل الثريات' : 'TRANSPORT TRUCKS'}
-            </div>
-            {filteredVehicles.map(v => {
-              const isOnRoute = v.status === 'on_route';
-              const isAtCustomer = v.status === 'at_customer';
-
-              return (
-                <div
-                  key={v.id}
-                  onClick={() => setSelectedVehicle(v)}
-                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800/80 hover:border-[#C5A45B]/60 transition-colors cursor-pointer flex flex-col gap-1.5 shadow-sm"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-bold text-slate-900 dark:text-white font-mono">{v.id}</span>
-                      <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">{v.plateNumber}</span>
-                    </div>
-                    <span className={`text-[9px] font-semibold px-1.5 py-0.2 rounded border ${
-                      isOnRoute 
-                        ? 'bg-blue-500/20 text-blue-600 dark:text-blue-300 border-blue-500/40' 
-                        : isAtCustomer
-                        ? 'bg-purple-500/20 text-purple-600 dark:text-purple-300 border-purple-500/40'
-                        : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border-emerald-500/40'
-                    }`}>
-                      {isOnRoute ? (isAr ? 'بالطريق' : 'En Route') : isAtCustomer ? (isAr ? 'بالموقع' : 'On Site') : (isAr ? 'متاحة' : 'Depot')}
-                    </span>
-                  </div>
-
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
-                    {v.model}
-                  </div>
-
-                  {/* Load bar */}
-                  <div className="flex items-center justify-between text-[9px] text-slate-500 font-mono pt-1 border-t border-slate-200 dark:border-slate-800/60">
-                    <span>{v.currentLoadKg}/{v.maxWeightKg} kg</span>
-                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{v.hasPneumaticDamping ? 'Air-Damped' : 'Standard'}</span>
-                  </div>
-                </div>
-              );
-            })}
-
-            {/* Teams Section */}
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-2 py-1 mt-2">
-              {isAr ? 'فِرق التركيب المعتمدة' : 'CERTIFIED TEAMS'}
-            </div>
-            {filteredTeams.map(t => (
-              <div
-                key={t.id}
-                className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800/80 hover:border-[#C5A45B]/60 transition-colors cursor-pointer flex flex-col gap-1.5 shadow-sm"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
-                    {isAr ? t.nameAr : t.nameEn}
-                  </span>
-                  <span className="text-[10px] font-mono text-[#8E6A23] dark:text-[#DFBA6B] font-bold">
-                    ★ {t.compositeSkillRating}
-                  </span>
-                </div>
-                <div className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
-                  <span>{isAr ? 'الحد الأقصى للارتفاع:' : 'Max Height:'}</span>
-                  <span className="font-mono text-slate-700 dark:text-slate-200">{t.maxHeightAuthorizedM}m</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Panel 2: Interactive Gantt Timeline (Center) */}
-        <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${mapCollapsed ? 'w-full' : ''}`}>
-          <GanttChart 
-            onSelectBlock={handleSelectGanttBlock}
-            onOpenReassign={(woId) => {
-              const wo = workOrders.find(w => w.id === woId);
-              if (wo) setReassignModalWo(wo);
-            }}
-          />
-        </div>
-
-        {/* Panel 3: Live Radar Map (Right) */}
-        {!mapCollapsed && (
-          <div className="w-80 lg:w-96 xl:w-[420px] shrink-0 flex flex-col overflow-hidden">
-            <LiveOperationsMap
-              onSelectWorkOrder={(wo) => {
-                setSelectedWorkOrder(wo);
-                openDetailModal('work_order', wo);
-              }}
-              onSelectVehicle={(v) => {
-                setSelectedVehicle(v);
-                openDetailModal('vehicle', v);
+        {/* VIEW 2: Full Gantt Timeline */}
+        {viewMode === 'gantt' && (
+          <div className="flex-1 flex flex-col overflow-hidden rounded-2xl shadow-md">
+            <GanttChart 
+              onSelectBlock={handleSelectGanttBlock}
+              onOpenReassign={(woId) => {
+                const wo = workOrders.find(w => w.id === woId);
+                if (wo) setReassignModalWo(wo);
               }}
             />
+          </div>
+        )}
+
+        {/* VIEW 3: Split View */}
+        {viewMode === 'split' && (
+          <div className="flex-1 flex flex-col md:flex-row gap-3 overflow-hidden">
+            <div className="flex-1 flex flex-col overflow-hidden rounded-2xl shadow-md">
+              <GanttChart 
+                onSelectBlock={handleSelectGanttBlock}
+                onOpenReassign={(woId) => {
+                  const wo = workOrders.find(w => w.id === woId);
+                  if (wo) setReassignModalWo(wo);
+                }}
+              />
+            </div>
+            <div className="w-full md:w-[480px] flex flex-col overflow-hidden rounded-2xl shadow-md">
+              <LiveOperationsMap
+                onSelectWorkOrder={(wo) => {
+                  setSelectedWorkOrder(wo);
+                  openDetailModal('work_order', wo);
+                }}
+                onSelectVehicle={(v) => {
+                  setSelectedVehicle(v);
+                  openDetailModal('vehicle', v);
+                }}
+              />
+            </div>
           </div>
         )}
       </div>
@@ -292,7 +245,7 @@ export const DispatchCenter: React.FC = () => {
         />
       )}
 
-      {/* Work Order Modal (Create / Edit) */}
+      {/* Simple Work Order Modal */}
       {workOrderModalOpen && (
         <WorkOrderModal
           onClose={() => setWorkOrderModalOpen(false)}

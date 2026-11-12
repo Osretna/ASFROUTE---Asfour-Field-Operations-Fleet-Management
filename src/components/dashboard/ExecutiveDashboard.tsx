@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   Truck, 
@@ -16,8 +16,10 @@ import {
   BarChart2,
   MessageSquare,
   Navigation,
-  Send
+  Send,
+  Plus
 } from 'lucide-react';
+import { WorkOrderModal } from '../workorders/WorkOrderModal';
 
 export const ExecutiveDashboard: React.FC = () => {
   const { 
@@ -27,245 +29,237 @@ export const ExecutiveDashboard: React.FC = () => {
     workOrders, 
     eventLogs, 
     setActiveTab, 
-    runAutoScheduleOptimizer,
-    isOptimizing,
     openDetailModal,
     sendCustomerLocationRequestWhatsApp,
     issueDeliveryDispatchOrder
   } = useApp();
 
   const isAr = language === 'ar';
+  const [modalOpen, setModalOpen] = useState(false);
+  const [quickFilter, setQuickFilter] = useState<'all' | 'pending_location' | 'dispatched'>('all');
 
   const totalVehicles = vehicles.length;
   const activeVehicles = vehicles.filter(v => v.status === 'on_route' || v.status === 'at_customer').length;
   const availableVehicles = vehicles.filter(v => v.status === 'available').length;
-  const totalTechs = technicians.length;
-  const fieldTechs = technicians.filter(t => t.status === 'on_site' || t.status === 'en_route').length;
-  
   const totalTasks = workOrders.length;
   const completedTasks = workOrders.filter(w => w.status === 'certified_closed' || w.status === 'completed_handover').length;
-  const inProgressTasks = workOrders.filter(w => w.status === 'crystal_assembly' || w.status === 'arrived_rigging' || w.status === 'en_route').length;
-  const delayedTasks = 1;
-
-  const completionRate = Math.round((completedTasks / (totalTasks || 1)) * 100);
-
-  // WhatsApp Location Status Counter
   const locationConfirmedCount = workOrders.filter(w => w.customerLocationConfirmed).length;
 
-  // Governorate distribution
-  const governorates = [
-    { nameAr: 'القاهرة والعاصمة الإدارية', nameEn: 'Cairo & New Capital', count: 4, pct: 50, color: 'bg-[#C5A45B]' },
-    { nameAr: 'الجيزة والشيخ زايد', nameEn: 'Giza & Sheikh Zayed', count: 2, pct: 25, color: 'bg-blue-500' },
-    { nameAr: 'الإسكندرية والساحل', nameEn: 'Alexandria & North Coast', count: 1, pct: 12.5, color: 'bg-emerald-500' },
-    { nameAr: 'العاشر من رمضان والشرقية', nameEn: '10th of Ramadan & Sharqia', count: 1, pct: 12.5, color: 'bg-purple-500' },
-  ];
+  const filteredOrders = workOrders.filter(wo => {
+    if (quickFilter === 'pending_location') return !wo.customerLocationConfirmed;
+    if (quickFilter === 'dispatched') return wo.status === 'en_route';
+    return true;
+  });
 
   return (
-    <div className="flex flex-col gap-6 p-4 sm:p-6 h-full overflow-y-auto max-w-7xl mx-auto w-full pb-28 text-slate-800 dark:text-slate-100 transition-colors duration-200">
-      {/* Hero Welcome & Operational Banner */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-[#131B2A] dark:to-[#0E1522] border border-slate-200 dark:border-slate-800 shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-full bg-[#C5A45B]/10 blur-3xl pointer-events-none" />
-        <div className="flex items-center gap-4 relative z-10">
-          <div className="w-12 h-12 rounded-2xl bg-[#C5A45B]/20 border border-[#C5A45B]/40 flex items-center justify-center text-[#8E6A23] dark:text-[#DFBA6B] shadow-inner shrink-0">
-            <Sparkles className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white">
-                {isAr ? 'لوحة العمليات والتحكم المركزي – عصفور كريستال' : 'Central Operations Control – Asfour Crystal'}
-              </h1>
-              <span className="text-[11px] font-mono bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-bold">
-                SLA: 98.4%
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              {isAr 
-                ? 'متابعة حية لأسطول الشاحنات المجهزة، فِرق تركيب الثريات الملكية، ومعدلات الأداء اللحظية' 
-                : 'Real-time monitoring of shock-damped fleet, royal chandelier rigging crews & live SLAs'}
-            </p>
-          </div>
+    <div className="flex flex-col gap-6 p-5 sm:p-8 h-full overflow-y-auto max-w-7xl mx-auto w-full pb-32 text-slate-800 dark:text-slate-100 transition-colors">
+      {/* Top Header: Simple & Spacious */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-slate-800/80">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2.5">
+            <span>{isAr ? 'لوحة المتابعة والعمليات' : 'Operations Dashboard'}</span>
+            <span className="text-[11px] font-mono bg-[#C5A45B]/15 text-[#8E6A23] dark:text-[#DFBA6B] border border-[#C5A45B]/30 px-2 py-0.5 rounded-full font-bold">
+              {isAr ? 'عصفور كريستال' : 'Asfour'}
+            </span>
+          </h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            {isAr ? 'إدارة سهلة لطلبات العملاء، مواعيد التركيب، وتوجيه الشاحنات عبر الخريطة والواتساب' : 'Simplified view for client orders, installation schedules & WhatsApp live dispatch'}
+          </p>
         </div>
 
-        <div className="flex items-center gap-2.5 relative z-10 shrink-0">
+        <div className="flex items-center gap-2.5 shrink-0">
+          <button
+            onClick={() => setModalOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#C5A45B] hover:bg-[#D4B36A] text-[#0D131D] shadow-md shadow-[#C5A45B]/20 transition-transform active:scale-95 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>{isAr ? 'إضافة عميل / أمر عمل' : 'New Order'}</span>
+          </button>
+
           <button
             onClick={() => setActiveTab('dispatch')}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-[#C5A45B] hover:bg-[#D4B36A] text-[#0D131D] transition-transform active:scale-95 shadow-lg shadow-[#C5A45B]/20 cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 transition-colors cursor-pointer"
           >
-            <span>{isAr ? 'فتح مركز الجدولة والخريطة' : 'Open Dispatcher Map'}</span>
-            <ArrowUpRight className="w-3.5 h-3.5" />
+            <span>{isAr ? 'الخريطة المباشرة' : 'Live Map'}</span>
+            <ArrowUpRight className="w-3.5 h-3.5 text-[#C5A45B]" />
           </button>
         </div>
       </div>
 
-      {/* KPI Cards Strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
-        {/* Vehicles */}
+      {/* 4 Clean Metric Cards (Spacious, Uncrowded) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Metric 1 */}
         <div 
           onClick={() => vehicles[0] && openDetailModal('vehicle', vehicles[0])}
-          className="p-4 rounded-xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 flex flex-col justify-between hover:border-[#C5A45B]/60 shadow-sm transition-colors cursor-pointer group"
-          title={isAr ? 'انقر لعرض شاشة تفاصيل الشاحنة' : 'Click to inspect vehicle'}
+          className="p-4 rounded-2xl bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 hover:border-[#C5A45B]/50 transition-all cursor-pointer shadow-sm flex flex-col justify-between"
         >
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-            <span className="text-xs font-semibold group-hover:text-[#8E6A23] dark:group-hover:text-[#DFBA6B] transition-colors">{isAr ? 'شاحنات النقل' : 'Fleet Vehicles'}</span>
+            <span className="text-xs font-semibold">{isAr ? 'الشاحنات بالأسطول' : 'Fleet Trucks'}</span>
             <Truck className="w-4 h-4 text-blue-500" />
           </div>
-          <div className="mt-3 flex items-baseline gap-2">
+          <div className="my-2 flex items-baseline gap-2">
             <span className="text-2xl font-bold font-mono text-slate-900 dark:text-white tabular-nums">{totalVehicles}</span>
             <span className="text-xs text-emerald-600 dark:text-emerald-400 font-mono">({activeVehicles} {isAr ? 'بالطريق' : 'active'})</span>
           </div>
-          <div className="mt-2 text-[11px] text-slate-500 flex justify-between">
-            <span>{isAr ? 'متاحة بالمستودع:' : 'Depot ready:'}</span>
-            <span className="font-mono text-slate-700 dark:text-slate-300 tabular-nums">{availableVehicles}</span>
+          <div className="text-[11px] text-slate-400">
+            {availableVehicles} {isAr ? 'جاهزة بالمستودع' : 'idle in depot'}
           </div>
         </div>
 
-        {/* Technicians */}
-        <div 
-          onClick={() => technicians[0] && openDetailModal('technician', technicians[0])}
-          className="p-4 rounded-xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 flex flex-col justify-between hover:border-[#C5A45B]/60 shadow-sm transition-colors cursor-pointer group"
-          title={isAr ? 'انقر لعرض شاشة تفاصيل الفني' : 'Click to inspect technician'}
-        >
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-            <span className="text-xs font-semibold group-hover:text-[#8E6A23] dark:group-hover:text-[#DFBA6B] transition-colors">{isAr ? 'فنيي ومهندسي التركيب' : 'Installation Technicians'}</span>
-            <Users className="w-4 h-4 text-[#C5A45B]" />
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-bold font-mono text-slate-900 dark:text-white tabular-nums">{totalTechs}</span>
-            <span className="text-xs text-[#8E6A23] dark:text-[#DFBA6B] font-mono">({fieldTechs} {isAr ? 'بالميدان' : 'in field'})</span>
-          </div>
-          <div className="mt-2 text-[11px] text-slate-500 flex justify-between">
-            <span>{isAr ? 'كبير مهندسين معتمد:' : 'Master Certified:'}</span>
-            <span className="font-mono text-slate-700 dark:text-slate-300 tabular-nums">4</span>
-          </div>
-        </div>
-
-        {/* Work Orders Today */}
+        {/* Metric 2 */}
         <div 
           onClick={() => workOrders[0] && openDetailModal('work_order', workOrders[0])}
-          className="p-4 rounded-xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 flex flex-col justify-between hover:border-[#C5A45B]/60 shadow-sm transition-colors cursor-pointer group"
-          title={isAr ? 'انقر لعرض شاشة تفاصيل أمر العمل' : 'Click to inspect work order'}
+          className="p-4 rounded-2xl bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 hover:border-[#C5A45B]/50 transition-all cursor-pointer shadow-sm flex flex-col justify-between"
         >
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-            <span className="text-xs font-semibold group-hover:text-[#8E6A23] dark:group-hover:text-[#DFBA6B] transition-colors">{isAr ? 'مهام اليوم' : 'Today Tasks'}</span>
-            <CalendarCheck className="w-4 h-4 text-emerald-500" />
+            <span className="text-xs font-semibold">{isAr ? 'إجمالي طلبات التركيب' : 'Total Orders'}</span>
+            <CalendarCheck className="w-4 h-4 text-[#C5A45B]" />
           </div>
-          <div className="mt-3 flex items-baseline gap-2">
+          <div className="my-2 flex items-baseline gap-2">
             <span className="text-2xl font-bold font-mono text-slate-900 dark:text-white tabular-nums">{totalTasks}</span>
-            <span className="text-xs text-blue-500 font-mono">({inProgressTasks} {isAr ? 'قيد التنفيذ' : 'active'})</span>
+            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-mono">({completedTasks} {isAr ? 'منجز' : 'done'})</span>
           </div>
-          <div className="mt-2 text-[11px] text-slate-500 flex justify-between">
-            <span>{isAr ? 'مكتملة ومُسلّمة:' : 'Completed:'}</span>
-            <span className="font-mono text-emerald-600 dark:text-emerald-400 tabular-nums">{completedTasks}</span>
-          </div>
-        </div>
-
-        {/* Completion % */}
-        <div className="p-4 rounded-xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 shadow-sm transition-colors">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-            <span className="text-xs font-semibold">{isAr ? 'نسبة الإنجاز اللحظية' : 'Daily Completion'}</span>
-            <TrendingUp className="w-4 h-4 text-purple-500" />
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-bold font-mono text-slate-900 dark:text-white tabular-nums">{completionRate}%</span>
-            <span className="text-xs text-amber-500 font-mono">({delayedTasks} {isAr ? 'تأخير' : 'delayed'})</span>
-          </div>
-          <div className="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
-            <div className="bg-[#C5A45B] h-full rounded-full transition-all duration-500" style={{ width: `${completionRate}%` }} />
+          <div className="text-[11px] text-slate-400">
+            {isAr ? 'نسبة الإنجاز 85%' : '85% SLA rate'}
           </div>
         </div>
 
-        {/* WhatsApp Location Coordination Stat */}
-        <div className="p-4 rounded-xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 flex flex-col justify-between hover:border-emerald-500/50 shadow-sm transition-colors col-span-2 md:col-span-1">
+        {/* Metric 3: WhatsApp GPS Status */}
+        <div 
+          onClick={() => setQuickFilter('pending_location')}
+          className="p-4 rounded-2xl bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 hover:border-emerald-500/50 transition-all cursor-pointer shadow-sm flex flex-col justify-between"
+        >
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-            <span className="text-xs font-semibold">{isAr ? 'تأكيد لوكيشن الواتساب' : 'WhatsApp GPS Pins'}</span>
+            <span className="text-xs font-semibold">{isAr ? 'لوكيشن محدد بالخريطة' : 'GPS Verified'}</span>
             <MessageSquare className="w-4 h-4 text-emerald-500" />
           </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-bold font-mono text-slate-900 dark:text-white tabular-nums">{locationConfirmedCount}</span>
-            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-mono">/{totalTasks} {isAr ? 'مؤكد' : 'verified'}</span>
+          <div className="my-2 flex items-baseline gap-2">
+            <span className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 tabular-nums">{locationConfirmedCount}</span>
+            <span className="text-xs text-slate-400 font-mono">/{totalTasks} {isAr ? 'موقع' : 'sites'}</span>
           </div>
-          <div className="mt-2 text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-mono">
-            <CheckCircle2 className="w-3 h-3" />
-            <span>{isAr ? 'جاهز للتوجيه المباشر' : 'Ready for Dispatch'}</span>
+          <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+            {isAr ? 'تحديد تلقائي من العنوان' : 'Auto-geocoded'}
+          </div>
+        </div>
+
+        {/* Metric 4 */}
+        <div 
+          onClick={() => setActiveTab('dispatch')}
+          className="p-4 rounded-2xl bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 hover:border-blue-500/50 transition-all cursor-pointer shadow-sm flex flex-col justify-between"
+        >
+          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <span className="text-xs font-semibold">{isAr ? 'أوامر تحرك السيارات' : 'Dispatched Trucks'}</span>
+            <Navigation className="w-4 h-4 text-blue-500" />
+          </div>
+          <div className="my-2 flex items-baseline gap-2">
+            <span className="text-2xl font-bold font-mono text-blue-600 dark:text-blue-400 tabular-nums">{activeVehicles}</span>
+            <span className="text-xs text-slate-400">{isAr ? 'شاحنة نشطة' : 'en route'}</span>
+          </div>
+          <div className="text-[11px] text-slate-400">
+            {isAr ? 'مربوطة بخرائط Google' : 'Google Maps routing'}
           </div>
         </div>
       </div>
 
-      {/* WhatsApp Location Dispatcher Quick Action Widget */}
-      <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-white to-slate-50 dark:from-emerald-950/20 dark:via-slate-900/90 dark:to-slate-900/70 border border-emerald-500/30 shadow-md flex flex-col gap-3">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-              <MessageSquare className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <span>{isAr ? 'متابعة إحداثيات ومواقع العملاء عبر واتساب' : 'Customer WhatsApp Location Dispatch Hub'}</span>
-                <span className="text-[10px] font-mono bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/30">
-                  LIVE WHATSAPP SYNC
-                </span>
-              </h2>
-              <span className="text-xs text-slate-500 dark:text-slate-400">
-                {isAr ? 'إرسال طلب الموقع للعميل، واستقبال الإحداثيات وتوجيه الشاحنات آلياً' : 'Request GPS pin from client via WhatsApp and route transport trucks directly'}
-              </span>
-            </div>
+      {/* Main Clean Work Orders & WhatsApp Dispatch Section */}
+      <div className="p-5 rounded-2xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm flex flex-col gap-4">
+        {/* Section Header with Quick Clean Filter */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-[#C5A45B]" />
+              <span>{isAr ? 'مواقع وطلبات العملاء (تحديد الموقع وأمر التحرك)' : 'Client Locations & Dispatch Orders'}</span>
+            </h2>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {isAr ? 'انقر على أي عميل لعرض موقعه، إرسال طلب الواتساب، أو إعطاء أمر التحرك للشاحنة' : 'Click any client to inspect GPS pin, request WhatsApp location, or dispatch truck'}
+            </span>
           </div>
 
-          <button
-            onClick={() => setActiveTab('dispatch')}
-            className="text-xs text-emerald-600 dark:text-emerald-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
-          >
-            <span>{isAr ? 'عرض الخريطة وتفاصيل الملاحة' : 'View Live Radar Map'}</span>
-            <ArrowUpRight className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
+            <button
+              onClick={() => setQuickFilter('all')}
+              className={`px-3 py-1 rounded-lg transition-colors font-medium cursor-pointer ${
+                quickFilter === 'all' ? 'bg-[#C5A45B] text-[#0D131D] font-bold' : 'text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white'
+              }`}
+            >
+              {isAr ? 'كافة الطلبات' : 'All'}
+            </button>
+            <button
+              onClick={() => setQuickFilter('pending_location')}
+              className={`px-3 py-1 rounded-lg transition-colors font-medium cursor-pointer ${
+                quickFilter === 'pending_location' ? 'bg-[#C5A45B] text-[#0D131D] font-bold' : 'text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white'
+              }`}
+            >
+              {isAr ? 'بانتظار اللوكيشن' : 'Need Location'}
+            </button>
+            <button
+              onClick={() => setQuickFilter('dispatched')}
+              className={`px-3 py-1 rounded-lg transition-colors font-medium cursor-pointer ${
+                quickFilter === 'dispatched' ? 'bg-[#C5A45B] text-[#0D131D] font-bold' : 'text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white'
+              }`}
+            >
+              {isAr ? 'شاحنات بالطريق' : 'Dispatched'}
+            </button>
+          </div>
         </div>
 
-        {/* Quick List of Active Orders for WhatsApp Action */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
-          {workOrders.slice(0, 3).map(wo => {
+        {/* Clean, Spacious Cards for Customer Orders */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          {filteredOrders.map(wo => {
             const hasLocation = wo.customerLocationConfirmed;
             const isEnRoute = wo.status === 'en_route';
 
             return (
-              <div 
+              <div
                 key={wo.id}
-                className="p-3 rounded-xl bg-white dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 flex flex-col justify-between gap-2.5 shadow-sm"
+                className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800/80 hover:border-[#C5A45B]/60 transition-all flex flex-col justify-between gap-3 shadow-sm"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <span className="text-xs font-bold text-slate-900 dark:text-white block">
-                      {isAr ? wo.customerNameAr : wo.customerNameEn}
-                    </span>
-                    <span className="text-[11px] font-mono text-slate-500 block">
-                      {wo.customerPhone} · {wo.orderNumber}
-                    </span>
+                {/* Top Row: Customer info & Status */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="cursor-pointer" onClick={() => openDetailModal('work_order', wo)}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-slate-900 dark:text-white hover:text-[#8E6A23] dark:hover:text-[#DFBA6B] transition-colors">
+                        {isAr ? wo.customerNameAr : wo.customerNameEn}
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-400 bg-white dark:bg-slate-900 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-800">
+                        {wo.orderNumber}
+                      </span>
+                    </div>
+
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5 font-medium">
+                      <MapPin className="w-3.5 h-3.5 text-[#C5A45B] shrink-0" />
+                      <span className="truncate">{wo.governorate} · {isAr ? wo.locationNameAr : wo.locationNameEn}</span>
+                    </div>
                   </div>
 
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                    hasLocation
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${
+                    isEnRoute
+                      ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30'
+                      : hasLocation
                       ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
                       : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
                   }`}>
-                    {hasLocation ? (isAr ? '📍 الموقع مؤكد' : '📍 Location Verified') : (isAr ? '⏳ بانتظار اللوكيشن' : '⏳ Awaiting Pin')}
+                    {isEnRoute ? (isAr ? '🚚 السيارة بالطريق' : '🚚 En Route') : hasLocation ? (isAr ? '📍 اللوكيشن محدد' : '📍 Location Set') : (isAr ? '⏳ بانتظار الموقع' : '⏳ Need Pin')}
                   </span>
                 </div>
 
-                <div className="text-[11px] text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
-                  <MapPin className="w-3 h-3 text-[#C5A45B]" />
-                  <span className="truncate">{isAr ? wo.locationNameAr : wo.locationNameEn}</span>
+                {/* Chandelier info */}
+                <div className="text-[11px] text-slate-600 dark:text-slate-400 flex items-center justify-between pt-1 border-t border-slate-200/60 dark:border-slate-800/60">
+                  <span className="truncate">{isAr ? wo.chandelier.modelNameAr : wo.chandelier.modelNameEn}</span>
+                  <span className="font-mono text-slate-700 dark:text-slate-300 shrink-0">{wo.timeWindowStart} - {wo.timeWindowEnd}</span>
                 </div>
 
-                {/* Quick Action Buttons */}
-                <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                {/* Actions: Send WhatsApp Location Request & Issue Delivery Order */}
+                <div className="flex items-center gap-2 pt-1">
                   <button
                     onClick={() => {
                       const res = sendCustomerLocationRequestWhatsApp(wo.id);
                       if (res.url) window.open(res.url, '_blank');
                     }}
-                    className="flex-1 py-1.5 px-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                    className="flex-1 py-2 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm shadow-emerald-600/20 cursor-pointer transition-colors"
                   >
-                    <Send className="w-3 h-3" />
-                    <span>{isAr ? 'طلب اللوكيشن (واتساب)' : 'WhatsApp Req'}</span>
+                    <Send className="w-3.5 h-3.5" />
+                    <span>{isAr ? 'طلب الموقع (واتساب)' : 'WhatsApp Req'}</span>
                   </button>
 
                   <button
@@ -273,14 +267,14 @@ export const ExecutiveDashboard: React.FC = () => {
                       issueDeliveryDispatchOrder(wo.id);
                     }}
                     disabled={isEnRoute}
-                    className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors ${
-                      isEnRoute 
-                        ? 'bg-blue-600/30 text-blue-400 border border-blue-500/40 cursor-default'
-                        : 'bg-[#C5A45B] hover:bg-[#D4B36A] text-[#0D131D]'
+                    className={`flex-1 py-2 px-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+                      isEnRoute
+                        ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30 cursor-default'
+                        : 'bg-[#C5A45B] hover:bg-[#D4B36A] text-[#0D131D] shadow-sm shadow-[#C5A45B]/20'
                     }`}
                   >
-                    <Navigation className="w-3 h-3" />
-                    <span>{isEnRoute ? (isAr ? 'الشاحنة بالطريق' : 'En Route') : (isAr ? 'أمر التوصيل' : 'Dispatch Order')}</span>
+                    <Navigation className="w-3.5 h-3.5" />
+                    <span>{isEnRoute ? (isAr ? 'الشاحنة بالطريق' : 'En Route') : (isAr ? 'أمر التوصيل للشاحنة' : 'Dispatch Order')}</span>
                   </button>
                 </div>
               </div>
@@ -289,158 +283,10 @@ export const ExecutiveDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Grid: Live Operations Stream & Operations Breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left 2 Cols: Operations Breakdown & Geographic Distribution */}
-        <div className="lg:col-span-2 flex flex-col gap-6">
-          {/* Active Work Orders Snapshot */}
-          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <BarChart2 className="w-4 h-4 text-[#C5A45B]" />
-                <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                  {isAr ? 'أوامر العمل النشطة وقيمة الثريات الجاري تركيبها' : 'Active High-Value Chandelier Work Orders'}
-                </h2>
-              </div>
-              <button 
-                onClick={() => setActiveTab('workorders')}
-                className="text-xs text-[#8E6A23] dark:text-[#DFBA6B] font-bold hover:underline cursor-pointer"
-              >
-                {isAr ? 'عرض الكل' : 'View All'}
-              </button>
-            </div>
-
-            <div className="flex flex-col gap-2.5">
-              {workOrders.slice(0, 4).map(wo => (
-                <div 
-                  key={wo.id}
-                  onClick={() => openDetailModal('work_order', wo)}
-                  className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 hover:border-[#C5A45B]/60 transition-colors cursor-pointer group shadow-sm"
-                  title={isAr ? 'انقر لفتح كامل التفاصيل بشاشة مستقلة' : 'Click to inspect in separate screen'}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-[#C5A45B]/15 border border-[#C5A45B]/30 flex items-center justify-center text-[#8E6A23] dark:text-[#DFBA6B] text-xs font-bold font-mono shrink-0">
-                      {wo.chandelier.layersCount}T
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-900 dark:text-slate-100 group-hover:text-[#8E6A23] dark:group-hover:text-[#DFBA6B] transition-colors">
-                          {isAr ? wo.customerNameAr : wo.customerNameEn}
-                        </span>
-                        <span className="text-[10px] font-mono text-slate-400">
-                          {wo.orderNumber}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 flex flex-wrap items-center gap-2">
-                        <span>{isAr ? wo.chandelier.modelNameAr : wo.chandelier.modelNameEn}</span>
-                        <span>·</span>
-                        <span className="font-mono text-slate-700 dark:text-slate-300">{wo.chandelier.weightKg} kg</span>
-                        <span>·</span>
-                        <span className="text-amber-600 dark:text-amber-400 font-mono">{wo.chandelier.totalCrystalPrisms.toLocaleString()} prisms</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <div className="flex flex-col text-end">
-                      <span className="text-[11px] font-mono font-semibold text-slate-700 dark:text-slate-200">
-                        {wo.timeWindowStart} - {wo.timeWindowEnd}
-                      </span>
-                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 capitalize font-medium">
-                        {wo.status.replace(/_/g, ' ')}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Regional Governorate Share */}
-          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-blue-500" />
-                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                  {isAr ? 'توزيع العمليات الميدانية حسب المحافظات' : 'Field Operations by Governorate'}
-                </h3>
-              </div>
-              <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
-                {workOrders.length} {isAr ? 'موقع نشط' : 'Active Sites'}
-              </span>
-            </div>
-
-            <div className="flex flex-col gap-3">
-              {governorates.map(gov => (
-                <div key={gov.nameEn} className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-700 dark:text-slate-300 font-medium">{isAr ? gov.nameAr : gov.nameEn}</span>
-                    <span className="text-slate-500 dark:text-slate-400 font-mono tabular-nums">{gov.count} ({gov.pct}%)</span>
-                  </div>
-                  <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                    <div className={`${gov.color} h-full rounded-full`} style={{ width: `${gov.pct}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Right Col: Live Event Feed (Audit & Operational Stream) */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 flex flex-col justify-between shadow-sm">
-          <div>
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 mb-4">
-              <div className="flex items-center gap-2">
-                <Zap className="w-4 h-4 text-[#C5A45B]" />
-                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                  {isAr ? 'شريط العمليات اللحظي (Live Stream)' : 'Real-Time Operational Stream'}
-                </h3>
-              </div>
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-            </div>
-
-            <div className="flex flex-col gap-3 max-h-[460px] overflow-y-auto pe-1">
-              {eventLogs.map((log) => {
-                const isSuccess = log.severity === 'success';
-                const isWarning = log.severity === 'warning';
-                const isAlert = log.severity === 'alert';
-
-                return (
-                  <div 
-                    key={log.id} 
-                    className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800/90 flex flex-col gap-1 text-xs"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className={`font-semibold flex items-center gap-1.5 ${
-                        isSuccess ? 'text-emerald-600 dark:text-emerald-400' :
-                        isWarning ? 'text-amber-600 dark:text-amber-400' :
-                        isAlert ? 'text-red-600 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'
-                      }`}>
-                        {isSuccess && <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
-                        {isWarning && <AlertCircle className="w-3.5 h-3.5 shrink-0" />}
-                        {isAlert && <AlertCircle className="w-3.5 h-3.5 shrink-0" />}
-                        {log.severity === 'info' && <Clock className="w-3.5 h-3.5 shrink-0" />}
-                        <span>{isAr ? log.titleAr : log.titleEn}</span>
-                      </span>
-                      <span className="font-mono text-[10px] text-slate-400 tabular-nums">
-                        {log.timestamp}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
-                      {isAr ? log.descriptionAr : log.descriptionEn}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500">
-            <span>{isAr ? 'تزامن الخادم: نشط عبر WebSocket' : 'Sync: Active via WebSocket'}</span>
-            <span className="font-mono text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">100% OK</span>
-          </div>
-        </div>
-      </div>
+      {/* Simple Work Order Creation Modal */}
+      {modalOpen && (
+        <WorkOrderModal onClose={() => setModalOpen(false)} />
+      )}
     </div>
   );
 };

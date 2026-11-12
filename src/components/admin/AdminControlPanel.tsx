@@ -30,6 +30,7 @@ import {
   Send
 } from 'lucide-react';
 import { WhatsAppAccount } from '../../types';
+import { ArchitectureViewer } from '../architecture/ArchitectureViewer';
 
 export const AdminControlPanel: React.FC = () => {
   const { 
@@ -60,7 +61,7 @@ export const AdminControlPanel: React.FC = () => {
 
   const isAr = language === 'ar';
 
-  const [activeAdminTab, setActiveAdminTab] = useState<'cloud_sql' | 'firebase' | 'storage' | 'maps' | 'whatsapp' | 'features' | 'system'>('cloud_sql');
+  const [activeAdminTab, setActiveAdminTab] = useState<'cloud_sql' | 'firebase' | 'storage' | 'maps' | 'whatsapp' | 'architecture' | 'features' | 'system'>('cloud_sql');
 
   // New WhatsApp line form state
   const [newWaNameAr, setNewWaNameAr] = useState('');
@@ -183,6 +184,7 @@ export const AdminControlPanel: React.FC = () => {
           { id: 'storage', labelAr: 'التخزين السحابي (S3 / GCS)', labelEn: 'Cloud Object Storage', icon: HardDrive },
           { id: 'maps', labelAr: 'خرائط وملاحة Google Maps Platform', labelEn: 'Google Maps API', icon: MapPin },
           { id: 'whatsapp', labelAr: 'أرقام وهواتف واتساب المتابعة والتوصيل', labelEn: 'WhatsApp Dispatch Desk', icon: MessageSquare },
+          { id: 'architecture', labelAr: 'هندسة النظام وقواعد البيانات', labelEn: 'System Architecture & Schema', icon: Database },
           { id: 'features', labelAr: 'تعديل وتفعيل مميزات النظام', labelEn: 'Feature Flags & Safety', icon: Sliders },
           { id: 'system', labelAr: 'حالة النظام وسجلات السيرفر', labelEn: 'System Health & Telemetry', icon: Server },
         ].map((tab) => {
@@ -1061,6 +1063,11 @@ export const AdminControlPanel: React.FC = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* ==================== TAB: SYSTEM ARCHITECTURE & SCHEMA ==================== */}
+        {activeAdminTab === 'architecture' && (
+          <ArchitectureViewer isEmbedded />
         )}
       </div>
     </div>
