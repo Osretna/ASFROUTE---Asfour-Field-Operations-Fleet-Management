@@ -35,6 +35,7 @@ export const IndependentDetailModal: React.FC = () => {
     sendCustomerLocationRequestWhatsApp,
     receiveCustomerLocationFromWhatsApp,
     issueDeliveryDispatchOrder,
+    openCustomerLocationPortal,
     setActiveTab
   } = useApp();
 
@@ -174,18 +175,30 @@ export const IndependentDetailModal: React.FC = () => {
                   </select>
                 </div>
 
-                {/* Send WhatsApp Location Request Button */}
+                {/* Send WhatsApp Location Request Button & Direct Portal Link */}
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
                       const res = sendCustomerLocationRequestWhatsApp(data.id, selectedWaAccount);
                       if (res.url) window.open(res.url, '_blank');
-                      showToast(isAr ? 'تم فتح محادثة الواتساب لطلب اللوكيشن من العميل' : 'Opened WhatsApp chat to request location');
+                      showToast(isAr ? 'تم فتح محادثة الواتساب لطلب اللوكيشن وتضمين الرابط المباشر' : 'Opened WhatsApp chat with direct portal link');
                     }}
                     className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 cursor-pointer transition-colors"
                   >
                     <Send className="w-3.5 h-3.5" />
-                    <span>{isAr ? 'إرسال رسالة واتساب للعميل لطلب موقعه' : 'Send WhatsApp Location Request'}</span>
+                    <span>{isAr ? 'إرسال رابط اللوكيشن عبر واتساب' : 'Send WhatsApp Location Request'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      closeDetailModal();
+                      openCustomerLocationPortal(data.id);
+                    }}
+                    className="py-2 px-3 rounded-xl bg-[#C5A45B]/20 hover:bg-[#C5A45B]/30 text-[#8E6A23] dark:text-[#DFBA6B] border border-[#C5A45B]/40 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                    title={isAr ? 'فتح صفحة العميل المباشرة لتأكيد الموقع وحفظه بالفيربيس' : 'Test Direct Customer Location Link'}
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>{isAr ? '🔗 رابط العميل المباشر' : '🔗 Direct Portal'}</span>
                   </button>
                 </div>
 
@@ -345,6 +358,58 @@ export const IndependentDetailModal: React.FC = () => {
                   <span className="text-[10px] text-slate-500 dark:text-slate-400 block">{isAr ? 'الارتفاع الداخلي' : 'Max Height'}</span>
                   <span className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400">{data.maxHeightM} m</span>
                 </div>
+              </div>
+
+              {/* Real-time GPS & Driver Diligence Status */}
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex flex-col gap-2.5">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+                  <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <Navigation className="w-4 h-4 text-[#C5A45B]" />
+                    <span>{isAr ? 'التتبع الحي ونزاهة السائق (LIVE):' : 'Live Tracking & Driver Diligence:'}</span>
+                  </span>
+                  <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold text-xs bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                    {data.driverDiligenceScore || 96}% {isAr ? 'انضباط' : 'Diligence'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-[10px] text-slate-500 block">{isAr ? 'موقع GPS اللحظي:' : 'Live Coordinates:'}</span>
+                    <span className="font-mono text-slate-800 dark:text-slate-200 font-semibold">{data.currentLat?.toFixed(4)}, {data.currentLng?.toFixed(4)}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 block">{isAr ? 'السرعة الحالية:' : 'Current Speed:'}</span>
+                    <span className="font-mono text-blue-600 dark:text-blue-400 font-bold">{data.speedKmH || 0} km/h</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 block">{isAr ? 'قفل صندوق الكريستال:' : 'Cargo Vault Lock:'}</span>
+                    <span className={data.cargoLockSecured !== false ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-red-500 font-bold'}>
+                      {data.cargoLockSecured !== false ? 'مؤمن ومشفر' : 'مفتوح (تنبيه)'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 block">{isAr ? 'مستشعر الصدمات:' : 'Vibration G-Force:'}</span>
+                    <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">{data.cargoVibrationGForce || 0.12} G</span>
+                  </div>
+                </div>
+
+                {data.missionDestinationAr && (
+                  <div className="pt-2 border-t border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-300">
+                    <span className="text-[10px] text-slate-500 block">{isAr ? 'وجهة المهمة المعتمدة:' : 'Mission Destination:'}</span>
+                    <span className="font-semibold text-slate-900 dark:text-white">{isAr ? data.missionDestinationAr : data.missionDestinationEn}</span>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => {
+                    closeDetailModal();
+                    setActiveTab('fleet');
+                  }}
+                  className="w-full mt-1 py-2 px-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/20 cursor-pointer hover:from-blue-500 hover:to-indigo-500 transition-all"
+                >
+                  <Navigation className="w-3.5 h-3.5" />
+                  <span>{isAr ? 'الانتقال للتتبع المباشر بالخريطة ورصد التلاعب' : 'Open Live GPS Radar in Fleet'}</span>
+                </button>
               </div>
 
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex flex-col gap-2">

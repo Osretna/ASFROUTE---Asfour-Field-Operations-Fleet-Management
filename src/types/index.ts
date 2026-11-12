@@ -20,6 +20,22 @@ export interface Branch {
 export type VehicleStatus = 'available' | 'on_route' | 'at_customer' | 'maintenance' | 'inspection_needed';
 export type VehicleType = 'Heavy Crystal Transporter' | 'Medium Installation Truck' | 'Specialized Rigging Van' | 'Rapid Survey Unit';
 
+export interface VehicleTelemetryBreadcrumb {
+  lat: number;
+  lng: number;
+  timestamp: string;
+  speedKmH: number;
+  event?: string;
+}
+
+export type DriverDiligenceStatus = 
+  | 'diligent'             // Working hard, on approved route, compliant
+  | 'suspicious_stop'       // Idling / stopped in unauthorized zone
+  | 'off_route'             // Deviated from authorized crystal corridor
+  | 'speeding'              // Exceeding 70 km/h crystal safety limit
+  | 'cargo_breach'          // Cargo door opened unexpectedly
+  | 'shock_detected';       // Severe road bump / vibration hazard
+
 export interface Vehicle {
   id: string;
   plateNumber: string;
@@ -38,6 +54,8 @@ export interface Vehicle {
   driverId?: string;
   driverNameAr?: string;
   driverNameEn?: string;
+  driverPhone?: string;
+  driverPhoto?: string;
   currentLat: number;
   currentLng: number;
   speedKmH: number;
@@ -45,6 +63,31 @@ export interface Vehicle {
   batteryOrHealthPercent: number;
   currentWorkOrderId?: string;
   nextStopEta?: string;
+
+  // Real-time Mission Tracking & Crystal Protection Telemetry
+  headingDegrees?: number;
+  missionStatus?: 'on_mission' | 'idle_depot' | 'unauthorized_stop' | 'route_deviation' | 'arrived_site';
+  missionDestinationAr?: string;
+  missionDestinationEn?: string;
+  missionTargetCoords?: [number, number];
+  missionProgressPercent?: number;
+
+  // Employee Diligence vs Tampering Detection
+  driverDiligenceScore?: number;          // 0-100 (e.g. 97 = Diligent)
+  driverDiligenceStatus?: DriverDiligenceStatus;
+  idleDurationMinutes?: number;           // Minutes parked with engine running or stopped
+  offRouteDistanceMeters?: number;        // Deviation from approved safety route
+  tamperingAlertsCount?: number;
+  lastTamperingReasonAr?: string;
+  lastTamperingReasonEn?: string;
+
+  // Luxury Crystal Cargo Safety Telemetry
+  cargoLockSecured?: boolean;             // True = electronic vault lock active
+  cargoVibrationGForce?: number;          // Normal <0.20G; Alert >0.45G
+  cargoBayTempC?: number;                 // Normal 21-24°C
+  cargoBayHumidityPercent?: number;
+  routeBreadcrumbs?: VehicleTelemetryBreadcrumb[];
+  lastTelemetryUpdate?: string;
 }
 
 export type SkillLevel = 1 | 2 | 3 | 4 | 5; // 5 = Master Artisan / Inspector

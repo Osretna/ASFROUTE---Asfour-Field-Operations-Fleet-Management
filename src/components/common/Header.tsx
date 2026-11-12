@@ -19,7 +19,8 @@ import {
   Clock,
   Check,
   Zap,
-  X
+  X,
+  Menu
 } from 'lucide-react';
 
 export const Header: React.FC = () => {
@@ -39,7 +40,9 @@ export const Header: React.FC = () => {
     setActiveTab,
     unreadAlertCount,
     markAllLogsRead,
-    triggerSimulatedIncident
+    triggerSimulatedIncident,
+    isMobileMenuOpen,
+    setIsMobileMenuOpen
   } = useApp();
 
   const isAr = language === 'ar';
@@ -72,27 +75,37 @@ export const Header: React.FC = () => {
 
   return (
     <header className="sticky top-0 z-40 flex items-center justify-between gap-4 px-6 py-3 bg-white/95 dark:bg-[#0D131D]/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 text-slate-800 dark:text-slate-100 shadow-sm transition-colors duration-200">
-      {/* Zone 1: Single Brand Wordmark with Secret Triple-Click Trigger */}
-      <div 
-        onClick={handleAsfrouteWordmarkClick}
-        className="flex items-center gap-3 shrink-0 cursor-pointer select-none group"
-        title={isAr ? 'نظام عصفور الذكي (انقر 3 مرات لفتح بوابة لوحة تحكم الأدمن)' : 'ASFROUTE (Triple-click for Super-Admin Access)'}
-      >
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#C5A45B] to-[#997C38] flex items-center justify-center shadow-lg shadow-[#C5A45B]/20 text-[#0D131D] group-hover:scale-105 transition-transform">
-          <Sparkles className="w-5 h-5 fill-current" />
-        </div>
-        <div className="flex flex-col">
-          <div className="flex items-center gap-2">
-            <span className="text-lg font-extrabold tracking-tight text-slate-900 dark:text-white font-sans group-hover:text-[#947125] dark:group-hover:text-[#DFBA6B] transition-colors">
-              ASFROUTE
-            </span>
-            <span className="text-[11px] font-semibold text-[#8E6A23] dark:text-[#DFBA6B] border border-[#C5A45B]/50 px-1.5 py-0.2 rounded font-sans tracking-wide bg-[#C5A45B]/10">
-              {isAr ? 'عصفور كريستال' : 'ASFOUR CRYSTAL'}
+      {/* Zone 1: Single Brand Wordmark with Mobile Menu Trigger */}
+      <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+        <button
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className="lg:hidden p-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700/80 transition-colors cursor-pointer"
+          aria-label={isAr ? 'القائمة الرئيسية' : 'Toggle Menu'}
+        >
+          <Menu className="w-5 h-5 text-[#C5A45B]" />
+        </button>
+
+        <div 
+          onClick={handleAsfrouteWordmarkClick}
+          className="flex items-center gap-2.5 sm:gap-3 cursor-pointer select-none group"
+          title={isAr ? 'نظام عصفور الذكي (انقر 3 مرات لفتح بوابة لوحة تحكم الأدمن)' : 'ASFROUTE (Triple-click for Super-Admin Access)'}
+        >
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-[#C5A45B] to-[#997C38] flex items-center justify-center shadow-lg shadow-[#C5A45B]/20 text-[#0D131D] group-hover:scale-105 transition-transform shrink-0">
+            <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
+          </div>
+          <div className="flex flex-col">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <span className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 dark:text-white font-sans group-hover:text-[#947125] dark:group-hover:text-[#DFBA6B] transition-colors">
+                ASFROUTE
+              </span>
+              <span className="hidden sm:inline-block text-[11px] font-semibold text-[#8E6A23] dark:text-[#DFBA6B] border border-[#C5A45B]/50 px-1.5 py-0.2 rounded font-sans tracking-wide bg-[#C5A45B]/10">
+                {isAr ? 'عصفور كريستال' : 'ASFOUR CRYSTAL'}
+              </span>
+            </div>
+            <span className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 font-normal truncate max-w-[150px] sm:max-w-none">
+              {isAr ? 'نظام العمليات والأسطول' : 'Field Operations & Fleet'}
             </span>
           </div>
-          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-normal">
-            {isAr ? 'نظام العمليات الميدانية والجدولة الذكية' : 'Field Operations & Fleet Management System'}
-          </span>
         </div>
       </div>
 

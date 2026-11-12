@@ -51,7 +51,7 @@
     },
     "WorkOrder": {
       "title": "WorkOrder",
-      "description": "Field operation work order for crystal chandelier installation",
+      "description": "Field operation work order for crystal chandelier installation and delivery",
       "type": "object",
       "properties": {
         "id": {
@@ -73,9 +73,89 @@
         "customerPhone": {
           "type": "string",
           "description": "Contact phone"
+        },
+        "customerLocationConfirmed": {
+          "type": "boolean",
+          "description": "True if customer confirmed GPS location via WhatsApp link"
         }
       },
       "required": ["id", "orderNumber", "status"]
+    },
+    "Vehicle": {
+      "title": "Vehicle",
+      "description": "Crystal transport truck with live GPS telemetry, driver diligence, and vault security",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Vehicle fleet ID"
+        },
+        "plateNumber": {
+          "type": "string",
+          "description": "Vehicle license plate"
+        },
+        "status": {
+          "type": "string",
+          "description": "Operational status"
+        },
+        "currentLat": {
+          "type": "number",
+          "description": "Real-time latitude"
+        },
+        "currentLng": {
+          "type": "number",
+          "description": "Real-time longitude"
+        },
+        "speedKmH": {
+          "type": "number",
+          "description": "Current speed"
+        },
+        "driverDiligenceScore": {
+          "type": "number",
+          "description": "Driver integrity and diligence score 0-100"
+        },
+        "driverDiligenceStatus": {
+          "type": "string",
+          "description": "Current diligence status"
+        },
+        "cargoLockSecured": {
+          "type": "boolean",
+          "description": "Whether the crystal cargo vault is locked"
+        }
+      },
+      "required": ["id", "plateNumber", "status"]
+    },
+    "CustomerLocation": {
+      "title": "CustomerLocation",
+      "description": "Customer location shared via WhatsApp link directly connected to work order",
+      "type": "object",
+      "properties": {
+        "workOrderId": {
+          "type": "string",
+          "description": "Associated work order ID"
+        },
+        "latitude": {
+          "type": "number",
+          "description": "Customer latitude"
+        },
+        "longitude": {
+          "type": "number",
+          "description": "Customer longitude"
+        },
+        "accuracy": {
+          "type": "number",
+          "description": "GPS accuracy in meters"
+        },
+        "addressText": {
+          "type": "string",
+          "description": "Customer address notes"
+        },
+        "submittedAt": {
+          "type": "string",
+          "description": "Submission timestamp"
+        }
+      },
+      "required": ["workOrderId", "latitude", "longitude"]
     }
   },
   "firestore": {
@@ -86,6 +166,14 @@
     "/work_orders/{orderId}": {
       "schema": "WorkOrder",
       "description": "Collection of operational work orders"
+    },
+    "/vehicles/{vehicleId}": {
+      "schema": "Vehicle",
+      "description": "Real-time fleet telemetry, GPS positions, and driver diligence"
+    },
+    "/customer_locations/{locId}": {
+      "schema": "CustomerLocation",
+      "description": "Direct customer location submissions from WhatsApp link"
     }
   }
 }

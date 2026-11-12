@@ -40,5 +40,11 @@ service cloud.firestore {
       allow read: if true;
       allow write: if true;
     }
+
+    // Direct customer location submissions from WhatsApp link
+    match /customer_locations/{locId} {
+      allow read: if true;
+      allow write: if true;
+    }
   }
 }

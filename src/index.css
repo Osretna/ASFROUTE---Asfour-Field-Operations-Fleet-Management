@@ -38,3 +38,13 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(197, 164, 91, 0.4);
 }
+
+/* Mobile Touch & Safe Area Inset Support (iOS & Android) */
+.safe-area-bottom {
+  padding-bottom: max(0.375rem, env(safe-area-inset-bottom, 0px));
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+

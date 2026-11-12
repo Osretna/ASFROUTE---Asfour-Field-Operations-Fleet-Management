@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { db, testConnection } from '../firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, collection, onSnapshot } from 'firebase/firestore';
 import { 
   Language, 
   ThemeMode, 
@@ -18,7 +18,8 @@ import {
   CloudStorageConfig,
   GoogleMapsConfig,
   SystemSecurityConfig,
-  WhatsAppAccount
+  WhatsAppAccount,
+  VehicleTelemetryBreadcrumb
 } from '../types';
 import { 
   BRANCHES, 
@@ -60,6 +61,8 @@ interface AppContextType {
   setActiveBranchId: (id: BranchId | 'all') => void;
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
+  isMobileMenuOpen: boolean;
+  setIsMobileMenuOpen: (open: boolean) => void;
   
   // Data entities
   vehicles: Vehicle[];
@@ -150,11 +153,29 @@ interface AppContextType {
   sendCustomerLocationRequestWhatsApp: (workOrderId: string, accountId?: string) => { url: string; message: string };
   receiveCustomerLocationFromWhatsApp: (workOrderId: string, lat: number, lng: number, addressDesc?: string) => void;
   issueDeliveryDispatchOrder: (workOrderId: string, vehicleId?: string) => { success: boolean; message: string };
+  openCustomerLocationPortal: (workOrderId: string) => void;
+  parseAndLinkWhatsAppMessage: (workOrderId: string, rawText: string) => { success: boolean; message: string; lat?: number; lng?: number };
+  customerPortalModalWo: WorkOrder | null;
+  setCustomerPortalModalWo: (wo: WorkOrder | null) => void;
+
+  // Firebase Real-Time Firestore Cloud State
+  isFirebaseSynced: boolean;
+  firestoreLastSyncTime: string;
 
   // Real-Time Notifications & Incident Alert Management
   unreadAlertCount: number;
   markAllLogsRead: () => void;
   triggerSimulatedIncident: (type?: 'speed' | 'vibration' | 'anchor' | 'delay') => void;
+
+  // Real-Time GPS Tracking, Driver Diligence & Cargo Protection
+  isLiveTrackingActive: boolean;
+  setIsLiveTrackingActive: (active: boolean) => void;
+  toggleLiveTracking: () => void;
+  simulateVehicleMovement: (vehicleId: string) => void;
+  simulateVehicleTampering: (vehicleId: string, type: 'deviation' | 'idle' | 'shock' | 'door') => void;
+  resolveVehicleTampering: (vehicleId: string) => void;
+  sendDriverMessage: (vehicleId: string, message: string) => { success: boolean; message: string };
+  toggleCargoLock: (vehicleId: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -227,6 +248,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedTechnician, setSelectedTechnician] = useState<Technician | null>(INITIAL_TECHNICIANS[0]);
   const [isOptimizing, setIsOptimizing] = useState<boolean>(false);
   const [certificateModalWo, setCertificateModalWo] = useState<WorkOrder | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
   // Presentation Detail Modal State
   const [detailModalState, setDetailModalState] = useState<DetailModalState | null>(null);
@@ -238,6 +260,142 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const closeDetailModal = () => {
     setDetailModalState(null);
   };
+
+  // Firebase Real-time Firestore Cloud State
+  const [isFirebaseSynced, setIsFirebaseSynced] = useState<boolean>(false);
+  const [firestoreLastSyncTime, setFirestoreLastSyncTime] = useState<string>('');
+
+  // Customer Direct WhatsApp Location Portal State
+  const [customerPortalModalWo, setCustomerPortalModalWo] = useState<WorkOrder | null>(null);
+
+  // ---------------- Real-Time Firebase Firestore Two-Way Sync ----------------
+  useEffect(() => {
+    let isMounted = true;
+
+    // Test connection
+    testConnection().then(ok => {
+      if (ok && isMounted) {
+        setIsFirebaseSynced(true);
+        setFirestoreLastSyncTime(new Date().toLocaleTimeString('ar-EG'));
+      }
+    });
+
+    // 1. Live Firestore listener on 'work_orders'
+    const unsubOrders = onSnapshot(collection(db, 'work_orders'), (snapshot) => {
+      if (!isMounted) return;
+      if (!snapshot.empty) {
+        const remoteOrders: WorkOrder[] = [];
+        snapshot.forEach(docSnap => {
+          remoteOrders.push(docSnap.data() as WorkOrder);
+        });
+        if (remoteOrders.length > 0) {
+          setWorkOrders(remoteOrders);
+          setIsFirebaseSynced(true);
+          setFirestoreLastSyncTime(new Date().toLocaleTimeString('ar-EG'));
+        }
+      } else {
+        // If Firestore work_orders is empty, seed initial work orders so Firestore has data!
+        INITIAL_WORK_ORDERS.forEach(wo => {
+          setDoc(doc(db, 'work_orders', wo.id), {
+            ...wo,
+            syncedAt: new Date().toISOString()
+          }, { merge: true }).catch(e => console.error('Error seeding wo:', e));
+        });
+      }
+    }, (err) => {
+      console.warn('Firestore onSnapshot work_orders:', err.message);
+    });
+
+    // 2. Live Firestore listener on 'vehicles'
+    const unsubVehicles = onSnapshot(collection(db, 'vehicles'), (snapshot) => {
+      if (!isMounted) return;
+      if (!snapshot.empty) {
+        const remoteVehicles: Vehicle[] = [];
+        snapshot.forEach(docSnap => {
+          remoteVehicles.push(docSnap.data() as Vehicle);
+        });
+        if (remoteVehicles.length > 0) {
+          setVehicles(remoteVehicles);
+          setIsFirebaseSynced(true);
+          setFirestoreLastSyncTime(new Date().toLocaleTimeString('ar-EG'));
+        }
+      } else {
+        // If Firestore vehicles is empty, seed initial vehicles so Firestore has data!
+        INITIAL_VEHICLES.forEach(veh => {
+          setDoc(doc(db, 'vehicles', veh.id), {
+            ...veh,
+            syncedAt: new Date().toISOString()
+          }, { merge: true }).catch(e => console.error('Error seeding vehicle:', e));
+        });
+      }
+    }, (err) => {
+      console.warn('Firestore onSnapshot vehicles:', err.message);
+    });
+
+    // 3. Inspect URL query params for WhatsApp direct portal link
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const action = searchParams.get('action');
+      const woId = searchParams.get('woId');
+      if (action === 'customer_location' && woId) {
+        let targetWo = workOrders.find(w => w.id === woId) || INITIAL_WORK_ORDERS.find(w => w.id === woId);
+        if (!targetWo) {
+          const fallbackOrder: WorkOrder = {
+            id: woId,
+            orderNumber: woId.startsWith('WO-') ? `ASF-EG-${woId.replace('WO-', '')}` : 'ASF-EG-88949',
+            type: 'grand_chandelier',
+            status: 'scheduled',
+            customerNameAr: 'محمد صلاح السيد فرحات',
+            customerNameEn: 'Mohamed Salah El-Sayed Farahat',
+            customerPhone: '+20 100 248 9112',
+            customerType: 'VIP Residential',
+            locationNameAr: 'فيلا الرحاب - التجمع الخامس',
+            locationNameEn: 'Rehab Villa - New Cairo',
+            governorate: 'القاهرة',
+            coordinates: [30.0125, 31.4700],
+            scheduledDate: '2026-11-12',
+            timeWindowStart: '13:00',
+            timeWindowEnd: '17:30',
+            estimatedDurationHours: 4.5,
+            chandelier: {
+              modelNumber: 'ASF-CH-ROYAL-902',
+              modelNameAr: 'ثريا فرساي الملكية المطلية بماء الذهب',
+              modelNameEn: 'Royal Versailles Gold-Plated Chandelier',
+              crystalCutType: 'Asfour 30% PbO Full Lead',
+              weightKg: 85,
+              diameterCm: 180,
+              heightCm: 120,
+              layersCount: 4,
+              totalCrystalPrisms: 1420,
+              requiredCeilingLoadCapacityKg: 200,
+              minimumCeilingHeightM: 4.5,
+              installationFragilityTier: 'Ultra-Delicate Masterpiece'
+            },
+            requiredSkillLevel: 4,
+            requiredTechniciansCount: 3,
+            requiresPneumaticTruck: true,
+            requiresCraneLift: false,
+            anchorTestPassed: true,
+            scaffoldingHeightM: 4.5,
+            notesAr: 'تم طلب تأكيد الموقع عبر الواتساب',
+            notesEn: 'Location confirmation requested via WhatsApp',
+            whatsappStatus: 'location_requested',
+            customerLocationConfirmed: false
+          };
+          targetWo = fallbackOrder;
+        }
+        if (targetWo) {
+          setCustomerPortalModalWo(targetWo);
+        }
+      }
+    } catch {}
+
+    return () => {
+      isMounted = false;
+      unsubOrders();
+      unsubVehicles();
+    };
+  }, []);
 
   // Sync entities with localStorage
   useEffect(() => {
@@ -466,6 +624,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Vehicles
   const addVehicle = (v: Vehicle) => {
     setVehicles(prev => [v, ...prev]);
+    // Persist to Firestore
+    try {
+      setDoc(doc(db, 'vehicles', v.id), {
+        ...v,
+        createdAt: new Date().toISOString()
+      }, { merge: true }).catch(err => console.error('Firestore addVehicle error:', err));
+    } catch {}
+
     addLiveLog(
       `إضافة شاحنة جديدة للأسطول: ${v.plateNumber}`,
       `New Fleet Vehicle Added: ${v.plateNumberEn}`,
@@ -482,6 +648,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (selectedVehicle?.id === updatedV.id) {
       setSelectedVehicle(updatedV);
     }
+    // Persist update to Firestore
+    try {
+      setDoc(doc(db, 'vehicles', updatedV.id), {
+        ...updatedV,
+        updatedAt: new Date().toISOString()
+      }, { merge: true }).catch(err => console.error('Firestore updateVehicle error:', err));
+    } catch {}
+
     addLiveLog(
       `تحديث بيانات الشاحنة: ${updatedV.id}`,
       `Vehicle Updated: ${updatedV.id}`,
@@ -499,6 +673,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (selectedVehicle?.id === id) {
       setSelectedVehicle(vehicles[0] || null);
     }
+    // Delete from Firestore
+    try {
+      deleteDoc(doc(db, 'vehicles', id)).catch(err => console.error('Firestore deleteVehicle error:', err));
+    } catch {}
+
     addLiveLog(
       `حذف شاحنة من الأسطول: ${id}`,
       `Vehicle Decommissioned: ${id}`,
@@ -1009,6 +1188,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setWhatsappAccounts(prev => prev.filter(a => a.id !== id));
   };
 
+  const openCustomerLocationPortal = (workOrderId: string) => {
+    const wo = workOrders.find(w => w.id === workOrderId);
+    if (wo) {
+      setCustomerPortalModalWo(wo);
+    }
+  };
+
   const sendCustomerLocationRequestWhatsApp = (workOrderId: string, accountId?: string) => {
     const wo = workOrders.find(w => w.id === workOrderId);
     if (!wo) return { url: '', message: '' };
@@ -1016,9 +1202,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const activeAcc = whatsappAccounts.find(a => accountId ? a.id === accountId : a.isActive) || whatsappAccounts[0];
     const customerPhoneClean = wo.customerPhone.replace(/[^0-9]/g, '');
 
+    // Direct Portal Link with action & order ID parameters for seamless 1-click customer GPS submission
+    const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+    const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+    // Automatically convert 'ais-dev-' to 'ais-pre-' to avoid Google 403 authorization error for external customers on WhatsApp/mobile
+    const publicOrigin = currentOrigin.replace('ais-dev-', 'ais-pre-');
+    const directPortalUrl = `${publicOrigin}${currentPath}?action=customer_location&woId=${wo.id}`;
+
     const message = language === 'ar'
-      ? `مرحباً بك عميلنا العزيز (${wo.customerNameAr}) من شركة عصفور كريستال 💎.\nنحن فريق المتابعة والتوصيل، جاري تجهيز شحنتكم رقم (${wo.orderNumber}) لتركيب (${wo.chandelier.modelNameAr}).\n\nيرجى التكرم بإرسال الموقع الجغرافي الدقيق للعنوان (Live Location أو رابط خرائط Google) عبر هذه المحادثة حتى تتوجه سيارة التوصيل وفريق التركيب إليكم مباشرة وبدون أي تأخير.`
-      : `Hello valued client (${wo.customerNameEn}) from Asfour Crystal 💎.\nWe are preparing your installation order (${wo.orderNumber}) for (${wo.chandelier.modelNameEn}).\n\nPlease share your exact location pin or Google Maps link via WhatsApp so our delivery vehicle and rigging team arrive directly at your address.`;
+      ? `مرحباً بك عميلنا العزيز (${wo.customerNameAr}) من شركة عصفور كريستال 💎.\nنحن فريق المتابعة واللوجستيات، جاري تجهيز شحنتكم رقم (${wo.orderNumber}) لتركيب (${wo.chandelier.modelNameAr}).\n\n🔗 لتأكيد موقعكم الجغرافي الدقيق وربطه فوراً بنظام التوجيه وشاحنة التوصيل بضغطة واحدة، يرجى فتح الرابط المباشر التالي:\n${directPortalUrl}\n\nأو يمكنكم إرسال موقعكم الجغرافي (Live Location) أو رابط خرائط Google في هذه المحادثة مباشرة.`
+      : `Hello valued client (${wo.customerNameEn}) from Asfour Crystal 💎.\nWe are preparing your installation order (${wo.orderNumber}) for (${wo.chandelier.modelNameEn}).\n\n🔗 To confirm and auto-link your exact location directly to our delivery system with one click, please tap this link:\n${directPortalUrl}\n\nOr simply share your Google Maps pin / WhatsApp Live Location directly in this chat.`;
 
     const encodedText = encodeURIComponent(message);
     const waUrl = `https://wa.me/${customerPhoneClean}?text=${encodedText}`;
@@ -1036,6 +1229,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return w;
     }));
 
+    // Persist to Firestore
+    setDoc(doc(db, 'work_orders', workOrderId), {
+      whatsappStatus: 'location_requested',
+      whatsappLastSentAt: nowTime,
+      whatsappAccountId: activeAcc?.id || null,
+      directPortalUrl
+    }, { merge: true }).catch(err => console.warn('Firestore update error on whatsapp send:', err));
+
     if (activeAcc) {
       setWhatsappAccounts(prev => prev.map(a => a.id === activeAcc.id ? { ...a, messagesSentCount: a.messagesSentCount + 1 } : a));
     }
@@ -1043,8 +1244,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addLiveLog(
       `إرسال طلب لوكيشن عبر واتساب: ${wo.customerNameAr}`,
       `WhatsApp Location Request Sent: ${wo.customerNameEn}`,
-      `تم إرسال رسالة واتساب للعميل عبر خط [${activeAcc?.nameAr || 'الخدمة'}] لطلب إحداثيات الموقع الدقيق للشحنة`,
-      `Dispatched location request via WhatsApp to ${wo.customerPhone}`,
+      `تم إرسال رابط تأكيد وتثبيت الموقع عبر خط [${activeAcc?.nameAr || 'الخدمة'}] للعميل (${wo.customerPhone}) وربطه بالمنظومة فورياً`,
+      `Dispatched direct GPS linking portal via WhatsApp to ${wo.customerPhone}`,
       'info',
       'work_order',
       wo.id
@@ -1054,31 +1255,129 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const receiveCustomerLocationFromWhatsApp = (workOrderId: string, lat: number, lng: number, addressDesc?: string) => {
-    const wo = workOrders.find(w => w.id === workOrderId);
-    if (!wo) return;
+    const wo = workOrders.find(w => w.id === workOrderId) || (customerPortalModalWo?.id === workOrderId ? customerPortalModalWo : null);
+    const note = addressDesc || (language === 'ar' ? 'تم استلام وتأكيد الإحداثيات الدقيقة من محادثة الواتساب' : 'Coordinates verified via customer WhatsApp live location');
 
-    setWorkOrders(prev => prev.map(w => {
-      if (w.id === workOrderId) {
-        return {
+    const customerNameAr = wo?.customerNameAr || 'محمد صلاح السيد فرحات';
+    const customerNameEn = wo?.customerNameEn || 'Mohamed Salah El-Sayed Farahat';
+    const orderNumber = wo?.orderNumber || (workOrderId.startsWith('WO-') ? `ASF-EG-${workOrderId.replace('WO-', '')}` : 'ASF-EG-88949');
+    const customerPhone = wo?.customerPhone || '+20 100 248 9112';
+
+    setWorkOrders(prev => {
+      const exists = prev.some(w => w.id === workOrderId);
+      if (exists) {
+        return prev.map(w => w.id === workOrderId ? {
           ...w,
           coordinates: [lat, lng],
           customerLocationConfirmed: true,
           whatsappStatus: 'location_received',
-          receivedLocationNote: addressDesc || (language === 'ar' ? 'تم استلام وتأكيد الإحداثيات الدقيقة من محادثة الواتساب' : 'Coordinates verified via customer WhatsApp live location')
-        };
+          receivedLocationNote: note
+        } : w);
       }
-      return w;
-    }));
+      if (wo) {
+        return [{
+          ...wo,
+          coordinates: [lat, lng],
+          customerLocationConfirmed: true,
+          whatsappStatus: 'location_received',
+          receivedLocationNote: note
+        }, ...prev];
+      }
+      return prev;
+    });
+
+    // Direct real-time persistence to Firestore work_orders
+    setDoc(doc(db, 'work_orders', workOrderId), {
+      coordinates: [lat, lng],
+      customerLocationConfirmed: true,
+      whatsappStatus: 'location_received',
+      receivedLocationNote: note,
+      lastLocationUpdatedAt: new Date().toISOString()
+    }, { merge: true }).then(() => {
+      setIsFirebaseSynced(true);
+      setFirestoreLastSyncTime(new Date().toLocaleTimeString('ar-EG'));
+    }).catch(err => console.warn('Firestore update work_order location error:', err));
+
+    // Also persist into dedicated customer_locations collection for audit & fleet dispatch
+    setDoc(doc(db, 'customer_locations', `LOC-${workOrderId}`), {
+      workOrderId,
+      orderNumber,
+      customerNameAr,
+      customerNameEn,
+      customerPhone,
+      lat,
+      lng,
+      addressDesc: note,
+      source: 'whatsapp_direct_link',
+      timestamp: new Date().toISOString()
+    }, { merge: true }).catch(err => console.warn('Firestore customer_locations error:', err));
 
     addLiveLog(
-      `استلام وتأكيد لوكيشن العميل بالواتساب: ${wo.customerNameAr}`,
-      `Customer Location Received via WhatsApp: ${wo.customerNameEn}`,
-      `تم تثبيت الإحداثيات الدقيقة [${lat.toFixed(4)}, ${lng.toFixed(4)}] والخريطة جاهزة لتوجيه الشاحنة فوراً`,
-      `Updated GPS coordinates for ${wo.orderNumber} via WhatsApp live pin`,
+      `✅ ربط مباشر للوكيشن الواتساب بالمنظومة: ${customerNameAr}`,
+      `✅ Customer WhatsApp Location Linked: ${customerNameEn}`,
+      `تم تحديث وتثبيت الإحداثيات [${lat.toFixed(4)}, ${lng.toFixed(4)}] وحفظها في قاعدة بيانات الفيربيس بنجاح!`,
+      `Updated & synced customer GPS coordinates [${lat.toFixed(4)}, ${lng.toFixed(4)}] into Firestore for ${orderNumber}`,
       'success',
       'work_order',
-      wo.id
+      workOrderId
     );
+  };
+
+  const parseAndLinkWhatsAppMessage = (workOrderId: string, rawText: string): { success: boolean; message: string; lat?: number; lng?: number } => {
+    const wo = workOrders.find(w => w.id === workOrderId);
+    if (!wo) return { success: false, message: 'Work order not found' };
+
+    // Intelligent Regex patterns for WhatsApp messages:
+    // 1. Google Maps / Apple Maps links (e.g. q=30.0444,31.2357 or @30.0444,31.2357)
+    // 2. Direct decimal pairs: 30.0444, 31.2357 or 30.0444 31.2357
+    // 3. URLs with ll=30.0444,31.2357
+    let matchedLat: number | null = null;
+    let matchedLng: number | null = null;
+
+    // Try URL or coordinates match
+    const coordsRegex = /(?:q=|@|loc:|ll=|place\/)?(-?\d{1,2}\.\d{3,8})[,\s/]+(-?\d{1,3}\.\d{3,8})/i;
+    const match = rawText.match(coordsRegex);
+
+    if (match && match[1] && match[2]) {
+      const pLat = parseFloat(match[1]);
+      const pLng = parseFloat(match[2]);
+      if (!isNaN(pLat) && !isNaN(pLng) && pLat >= -90 && pLat <= 90 && pLng >= -180 && pLng <= 180) {
+        matchedLat = pLat;
+        matchedLng = pLng;
+      }
+    }
+
+    // Secondary attempt: look for standard Egyptian coordinates (Latitude ~22-32, Longitude ~25-36)
+    if (matchedLat === null) {
+      const egRegex = /(?:خط العرض|lat|latitude)?[:\s]*(\d{2}\.\d+)[^\d]+(?:خط الطول|lng|lon|longitude)?[:\s]*(\d{2}\.\d+)/i;
+      const egMatch = rawText.match(egRegex);
+      if (egMatch && egMatch[1] && egMatch[2]) {
+        matchedLat = parseFloat(egMatch[1]);
+        matchedLng = parseFloat(egMatch[2]);
+      }
+    }
+
+    if (matchedLat !== null && matchedLng !== null) {
+      receiveCustomerLocationFromWhatsApp(workOrderId, matchedLat, matchedLng, `تم الاستخراج التلقائي من رسالة الواتساب: "${rawText.slice(0, 60)}..."`);
+      return {
+        success: true,
+        message: language === 'ar'
+          ? `تم رصد واستخراج الإحداثيات الجغرافية [${matchedLat.toFixed(4)}, ${matchedLng.toFixed(4)}] وحفظها في قاعدة البيانات فورياً!`
+          : `GPS coordinates [${matchedLat.toFixed(4)}, ${matchedLng.toFixed(4)}] extracted and synced to cloud!`,
+        lat: matchedLat,
+        lng: matchedLng
+      };
+    }
+
+    // If pure text without clear lat/lng (e.g., short maps.app.goo.gl link or street name)
+    // We open the customer location interactive portal so dispatcher or client can pinpoint with 1 click
+    openCustomerLocationPortal(workOrderId);
+    return {
+      success: false,
+      message: language === 'ar'
+        ? `لم يتم العثور على أرقام خطوط الطول والعرض مباشرة في النص. تم فتح نافذة الخريطة التفاعلية لتثبيت الموقع بدقة.`
+        : `Could not parse numeric coordinates directly. Opened interactive map portal for precise pin selection.`
+    };
   };
 
   const issueDeliveryDispatchOrder = (workOrderId: string, vehicleId?: string): { success: boolean; message: string } => {
@@ -1119,6 +1418,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return w;
     }));
+
+    // Persist dispatch state to Firestore
+    setDoc(doc(db, 'vehicles', targetVehicleId), {
+      status: 'on_route',
+      currentWorkOrderId: workOrderId,
+      nextStopEta: '25 min',
+      lastTelemetryUpdate: 'أمر تحرك مباشر'
+    }, { merge: true }).catch(err => console.warn('Firestore vehicle dispatch save error:', err));
+
+    setDoc(doc(db, 'work_orders', workOrderId), {
+      status: 'en_route',
+      assignedVehicleId: targetVehicleId,
+      dispatchOrderGiven: true,
+      dispatchOrderGivenAt: nowTime,
+      whatsappStatus: 'dispatch_confirmed'
+    }, { merge: true }).catch(err => console.warn('Firestore work order dispatch save error:', err));
 
     addLiveLog(
       `🚨 صدور أمر تحرك الشاحنة إلى موقع العميل: ${targetVehicle.plateNumber}`,
@@ -1194,6 +1509,346 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // ---------------- Real-Time GPS Tracking, Driver Diligence & Cargo Protection ----------------
+  const [isLiveTrackingActive, setIsLiveTrackingActive] = useState<boolean>(true);
+
+  // Background automated telemetry simulation for trucks on route
+  useEffect(() => {
+    if (!isLiveTrackingActive) return;
+
+    const interval = setInterval(() => {
+      setVehicles(prevVehicles => {
+        return prevVehicles.map(veh => {
+          if (veh.status !== 'on_route' || veh.driverDiligenceStatus === 'suspicious_stop') {
+            return veh;
+          }
+
+          // Move truck along vector towards target if defined
+          const targetLat = veh.missionTargetCoords?.[0] || 30.0125;
+          const targetLng = veh.missionTargetCoords?.[1] || 31.7500;
+
+          const dLat = targetLat - veh.currentLat;
+          const dLng = targetLng - veh.currentLng;
+          const dist = Math.sqrt(dLat * dLat + dLng * dLng);
+
+          if (dist > 0.005) {
+            const step = 0.0012; // Realistic vehicle road progression
+            const newLat = veh.currentLat + (dLat / dist) * step;
+            const newLng = veh.currentLng + (dLng / dist) * step;
+            const newProgress = Math.min(98, (veh.missionProgressPercent || 45) + 1);
+
+            const now = new Date();
+            const timeStr = now.toTimeString().split(' ')[0].slice(0, 5);
+
+            const newBreadcrumb: VehicleTelemetryBreadcrumb = {
+              lat: newLat,
+              lng: newLng,
+              timestamp: timeStr,
+              speedKmH: veh.speedKmH,
+              event: 'تتبع حي منتظم - المسار آمن'
+            };
+
+            const updatedBreadcrumbs = [
+              ...(veh.routeBreadcrumbs || []).slice(-15),
+              newBreadcrumb
+            ];
+
+            return {
+              ...veh,
+              currentLat: newLat,
+              currentLng: newLng,
+              missionProgressPercent: newProgress,
+              lastTelemetryUpdate: 'منذ ثوانٍ',
+              routeBreadcrumbs: updatedBreadcrumbs,
+              driverDiligenceScore: veh.driverDiligenceStatus === 'diligent' ? Math.min(100, (veh.driverDiligenceScore || 95)) : veh.driverDiligenceScore
+            };
+          }
+          return veh;
+        });
+      });
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [isLiveTrackingActive]);
+
+  const toggleLiveTracking = () => {
+    setIsLiveTrackingActive(prev => !prev);
+  };
+
+  const simulateVehicleMovement = (vehicleId: string) => {
+    let updatedVehicle: Vehicle | null = null;
+    setVehicles(prev => prev.map(v => {
+      if (v.id === vehicleId) {
+        const targetLat = v.missionTargetCoords?.[0] || 30.0125;
+        const targetLng = v.missionTargetCoords?.[1] || 31.7500;
+        const dLat = targetLat - v.currentLat;
+        const dLng = targetLng - v.currentLng;
+        const dist = Math.sqrt(dLat * dLat + dLng * dLng) || 1;
+        const step = 0.004;
+
+        const newLat = v.currentLat + (dLat / dist) * step;
+        const newLng = v.currentLng + (dLng / dist) * step;
+        const newProgress = Math.min(99, (v.missionProgressPercent || 50) + 5);
+
+        const now = new Date().toTimeString().split(' ')[0].slice(0, 5);
+        const newBreadcrumbs = [
+          ...(v.routeBreadcrumbs || []),
+          { lat: newLat, lng: newLng, timestamp: now, speedKmH: v.speedKmH, event: 'تحديث يدوي للموقع' }
+        ];
+
+        const updated: Vehicle = {
+          ...v,
+          currentLat: newLat,
+          currentLng: newLng,
+          missionProgressPercent: newProgress,
+          lastTelemetryUpdate: 'الآن',
+          routeBreadcrumbs: newBreadcrumbs
+        };
+        updatedVehicle = updated;
+        return updated;
+      }
+      return v;
+    }));
+
+    if (updatedVehicle) {
+      setDoc(doc(db, 'vehicles', vehicleId), updatedVehicle, { merge: true }).catch(e => console.warn('Vehicle Firestore save:', e));
+    }
+
+    addLiveLog(
+      `تحديث نبضة GPS للشاحنة: ${vehicleId}`,
+      `GPS Ping Received: ${vehicleId}`,
+      `تم استلام إحداثيات جديدة للشاحنة وتأكيد استمرار المسار المعتمد بنجاح`,
+      `Updated GPS telemetry coordinates for truck ${vehicleId}`,
+      'info',
+      'vehicle',
+      vehicleId
+    );
+  };
+
+  const simulateVehicleTampering = (vehicleId: string, type: 'deviation' | 'idle' | 'shock' | 'door') => {
+    const v = vehicles.find(item => item.id === vehicleId);
+    if (!v) return;
+
+    let updatedVehicle: Vehicle | null = null;
+
+    if (type === 'deviation') {
+      const deviatedLat = v.currentLat + 0.007;
+      const deviatedLng = v.currentLng - 0.006;
+      setVehicles(prev => prev.map(veh => {
+        if (veh.id === vehicleId) {
+          const updated: Vehicle = {
+            ...veh,
+            currentLat: deviatedLat,
+            currentLng: deviatedLng,
+            offRouteDistanceMeters: 780,
+            driverDiligenceScore: 64,
+            driverDiligenceStatus: 'off_route',
+            tamperingAlertsCount: (veh.tamperingAlertsCount || 0) + 1,
+            lastTamperingReasonAr: 'انحراف الشاحنة 780 متراً عن مسار شحن الكريستال نحو منطقة غير مصرح بها',
+            lastTamperingReasonEn: 'Vehicle deviated 780m from approved crystal corridor into unauthorized sector',
+            lastTelemetryUpdate: 'تنبيه انحراف مسار'
+          };
+          updatedVehicle = updated;
+          return updated;
+        }
+        return veh;
+      }));
+
+      addLiveLog(
+        `🚨 رصد انحراف وتلاعب بالمسار: ${v.plateNumber} (${v.driverNameAr})`,
+        `🚨 Route Tampering Alert: ${v.plateNumberEn} (${v.driverNameEn})`,
+        `انحرفت الشاحنة 780م عن خط السير المصرح به لنقل الكريستال. انخفض مؤشر انضباط السائق إلى 64%. تم إرسال إشعار فوري لغرفة العمليات.`,
+        `Truck drifted 780m outside geofence corridor. Driver diligence score dropped to 64%.`,
+        'alert',
+        'safety',
+        v.id
+      );
+    } else if (type === 'idle') {
+      setVehicles(prev => prev.map(veh => {
+        if (veh.id === vehicleId) {
+          const updated: Vehicle = {
+            ...veh,
+            speedKmH: 0,
+            idleDurationMinutes: 42,
+            driverDiligenceScore: 68,
+            driverDiligenceStatus: 'suspicious_stop',
+            tamperingAlertsCount: (veh.tamperingAlertsCount || 0) + 1,
+            lastTamperingReasonAr: 'توقف خامل غير مبرر لمدة 42 دقيقة مع دوران المحرك واستهلاك الوقود دون إذن',
+            lastTamperingReasonEn: 'Unauthorized idling for 42 minutes with engine running without operational cause',
+            lastTelemetryUpdate: 'تنبيه توقف مشبوه'
+          };
+          updatedVehicle = updated;
+          return updated;
+        }
+        return veh;
+      }));
+
+      addLiveLog(
+        `⚠️ اشتباه تلاعب وتوقف خامل: ${v.plateNumber} (${v.driverNameAr})`,
+        `⚠️ Unauthorized Idling Detected: ${v.plateNumberEn} (${v.driverNameEn})`,
+        `الشاحنة متوقفة منذ 42 دقيقة في منطقة غير مجدولة والمحرك يعمل. مؤشر إنتاجية السائق انخفض إلى 68%.`,
+        `Vehicle idle for 42 minutes off-schedule. Diligence score reduced to 68%.`,
+        'warning',
+        'safety',
+        v.id
+      );
+    } else if (type === 'shock') {
+      setVehicles(prev => prev.map(veh => {
+        if (veh.id === vehicleId) {
+          const updated: Vehicle = {
+            ...veh,
+            cargoVibrationGForce: 0.78,
+            driverDiligenceScore: 74,
+            driverDiligenceStatus: 'shock_detected',
+            tamperingAlertsCount: (veh.tamperingAlertsCount || 0) + 1,
+            lastTamperingReasonAr: 'اهتزاز عنيف 0.78G بمستشعر الكريستال نتيجة مطب حاد أو قيادة غير متزنة',
+            lastTamperingReasonEn: 'Severe shock vibration 0.78G detected risking crystal prism fractures',
+            lastTelemetryUpdate: 'إنذار اهتزاز كريستال'
+          };
+          updatedVehicle = updated;
+          return updated;
+        }
+        return veh;
+      }));
+
+      addLiveLog(
+        `🚨 خطر على حمولة الكريستال: ${v.plateNumber} (0.78G)`,
+        `🚨 Crystal Shock Alert: ${v.plateNumberEn} (0.78G)`,
+        `رصد مستشعر الصدمات الهيدروليكي ارتطاماً قوياً (0.78G) يهدد سلامة ثريات الكريستال الفاخرة! تم إلزام السائق بتهدئة السرعة فوراً.`,
+        `Shock threshold exceeded (0.78G). Automatic speed limiter warning dispatched.`,
+        'alert',
+        'safety',
+        v.id
+      );
+    } else if (type === 'door') {
+      setVehicles(prev => prev.map(veh => {
+        if (veh.id === vehicleId) {
+          const updated: Vehicle = {
+            ...veh,
+            cargoLockSecured: false,
+            driverDiligenceScore: 52,
+            driverDiligenceStatus: 'cargo_breach',
+            tamperingAlertsCount: (veh.tamperingAlertsCount || 0) + 1,
+            lastTamperingReasonAr: 'فتح باب مقصورة الكريستال إلكترونياً خارج محيط العميل المصرح به!',
+            lastTamperingReasonEn: 'Unauthorized crystal vault door opening outside delivery geofence!',
+            lastTelemetryUpdate: 'إنذار اختراق قفل الصندوق'
+          };
+          updatedVehicle = updated;
+          return updated;
+        }
+        return veh;
+      }));
+
+      addLiveLog(
+        `🚨 إنذار فوري: فتح صندوق الكريستال! ${v.plateNumber}`,
+        `🚨 Cargo Vault Breach: ${v.plateNumberEn}`,
+        `انفتح باب صندوق الشاحنة في موقع غير مصرح به أثناء سير المهمة! تم إرسال إشارة استنفار أمني فوري.`,
+        `Cargo compartment door opened mid-mission outside client geofence!`,
+        'alert',
+        'safety',
+        v.id
+      );
+    }
+
+    if (updatedVehicle) {
+      setDoc(doc(db, 'vehicles', vehicleId), updatedVehicle, { merge: true }).catch(e => console.warn('Vehicle Firestore tampering save:', e));
+    }
+  };
+
+  const resolveVehicleTampering = (vehicleId: string) => {
+    let updatedVehicle: Vehicle | null = null;
+    setVehicles(prev => prev.map(veh => {
+      if (veh.id === vehicleId) {
+        const updated: Vehicle = {
+          ...veh,
+          offRouteDistanceMeters: 0,
+          idleDurationMinutes: 0,
+          cargoLockSecured: true,
+          cargoVibrationGForce: 0.12,
+          speedKmH: veh.status === 'on_route' ? 55 : 0,
+          driverDiligenceScore: 98,
+          driverDiligenceStatus: 'diligent',
+          lastTamperingReasonAr: undefined,
+          lastTamperingReasonEn: undefined,
+          lastTelemetryUpdate: 'تمت معالجة التنبيه'
+        };
+        updatedVehicle = updated;
+        return updated;
+      }
+      return veh;
+    }));
+
+    if (updatedVehicle) {
+      setDoc(doc(db, 'vehicles', vehicleId), updatedVehicle, { merge: true }).catch(e => console.warn('Vehicle Firestore resolve save:', e));
+    }
+
+    const v = vehicles.find(item => item.id === vehicleId);
+    addLiveLog(
+      `✅ معالجة التنبيه وتأكيد سلامة الشاحنة: ${v?.plateNumber || vehicleId}`,
+      `✅ Vehicle Alert Resolved: ${v?.plateNumberEn || vehicleId}`,
+      `تم التواصل مع السائق والتحقق من سلامة حمولة الكريستال وعودته للمسار المعتمد بكفاءة تامة`,
+      `Verified driver adherence and secured crystal cargo back on approved track`,
+      'success',
+      'vehicle',
+      vehicleId
+    );
+  };
+
+  const sendDriverMessage = (vehicleId: string, message: string): { success: boolean; message: string } => {
+    const v = vehicles.find(item => item.id === vehicleId);
+    if (!v) return { success: false, message: 'Vehicle not found' };
+
+    addLiveLog(
+      `إرسال توجيه فوري لكابينة السائق: ${v.driverNameAr}`,
+      `Direct Dispatcher Instruction: ${v.driverNameEn}`,
+      `تم إرسال تنبيه صوتي ورسالة شاشة إلى الشاحنة ${v.plateNumber}: "${message}"`,
+      `Transmitted in-cab voice & HUD dispatch notice to ${v.plateNumberEn}: "${message}"`,
+      'warning',
+      'safety',
+      vehicleId
+    );
+
+    return {
+      success: true,
+      message: language === 'ar' 
+        ? `تم إرسال التوجيه بنجاح إلى شاشة كابينة السائق ${v.driverNameAr} ونظام الإنذار الداخلي.`
+        : `Instruction dispatched to in-cab HUD of driver ${v.driverNameEn}.`
+    };
+  };
+
+  const toggleCargoLock = (vehicleId: string) => {
+    let updatedVehicle: Vehicle | null = null;
+    setVehicles(prev => prev.map(v => {
+      if (v.id === vehicleId) {
+        const nextState = !v.cargoLockSecured;
+        const updated: Vehicle = {
+          ...v,
+          cargoLockSecured: nextState,
+          driverDiligenceStatus: nextState ? (v.driverDiligenceStatus === 'cargo_breach' ? 'diligent' : v.driverDiligenceStatus) : 'cargo_breach'
+        };
+        updatedVehicle = updated;
+        return updated;
+      }
+      return v;
+    }));
+
+    if (updatedVehicle) {
+      setDoc(doc(db, 'vehicles', vehicleId), updatedVehicle, { merge: true }).catch(e => console.warn('Vehicle Firestore toggleCargoLock save:', e));
+    }
+
+    const v = vehicles.find(item => item.id === vehicleId);
+    const isNowLocked = !v?.cargoLockSecured;
+    addLiveLog(
+      isNowLocked ? `🔒 تأمين وقفل صندوق الكريستال عن بعد: ${v?.plateNumber}` : `🔓 فتح قفل صندوق الكريستال: ${v?.plateNumber}`,
+      isNowLocked ? `🔒 Remote Vault Locked: ${v?.plateNumberEn}` : `🔓 Remote Vault Unlocked: ${v?.plateNumberEn}`,
+      isNowLocked ? `تم إحكام القفل الإلكتروني المشفر لصندوق الكريستال بنجاح` : `تم فك قفل صندوق الكريستال بتصريح غرفة العمليات`,
+      isNowLocked ? `Electronic vault lock secured on ${vehicleId}` : `Vault lock released on ${vehicleId}`,
+      isNowLocked ? 'success' : 'warning',
+      'safety',
+      vehicleId
+    );
+  };
+
   const filteredVehicles = activeBranchId === 'all' 
     ? vehicles 
     : vehicles.filter(v => v.branchId === activeBranchId);
@@ -1216,6 +1871,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setActiveBranchId,
       activeTab,
       setActiveTab,
+      isMobileMenuOpen,
+      setIsMobileMenuOpen,
       vehicles: filteredVehicles,
       technicians,
       teams,
@@ -1265,6 +1922,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       certificateModalWo,
       setCertificateModalWo,
 
+      // Customer Direct WhatsApp Location Portal
+      customerPortalModalWo,
+      setCustomerPortalModalWo,
+      openCustomerLocationPortal,
+      parseAndLinkWhatsAppMessage,
+
+      // Firebase Real-time Firestore Sync Status
+      isFirebaseSynced,
+      firestoreLastSyncTime,
+
       // Admin & Cloud
       isAdminAuthenticated,
       showLoginModal,
@@ -1300,6 +1967,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unreadAlertCount,
       markAllLogsRead,
       triggerSimulatedIncident,
+
+      // Real-Time GPS Tracking, Driver Diligence & Cargo Protection
+      isLiveTrackingActive,
+      setIsLiveTrackingActive,
+      toggleLiveTracking,
+      simulateVehicleMovement,
+      simulateVehicleTampering,
+      resolveVehicleTampering,
+      sendDriverMessage,
+      toggleCargoLock,
     }}>
       {children}
     </AppContext.Provider>

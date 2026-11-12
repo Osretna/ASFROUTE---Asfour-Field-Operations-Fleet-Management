@@ -12,7 +12,8 @@ import {
   Sliders,
   ShieldAlert,
   Lock,
-  ShieldCheck
+  ShieldCheck,
+  X
 } from 'lucide-react';
 
 interface NavItem {
@@ -32,7 +33,9 @@ export const Sidebar: React.FC = () => {
     workOrders, 
     vehicles,
     isAdminAuthenticated,
-    setShowLoginModal
+    setShowLoginModal,
+    isMobileMenuOpen,
+    setIsMobileMenuOpen
   } = useApp();
   const isAr = language === 'ar';
 
@@ -103,16 +106,25 @@ export const Sidebar: React.FC = () => {
     });
   }
 
-  return (
-    <aside className="w-64 shrink-0 bg-white dark:bg-[#0A0E17] border-e border-slate-200 dark:border-slate-800/80 flex flex-col justify-between p-3 select-none text-slate-700 dark:text-slate-300 transition-colors duration-200">
+  const renderSidebarContent = (isMobile = false) => (
+    <div className="flex flex-col justify-between h-full">
       <div className="flex flex-col gap-1.5">
         <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 font-mono flex items-center justify-between">
           <span>{isAr ? 'الوحدات التشغيلية' : 'OPERATIONAL MODULES'}</span>
-          {isAdminAuthenticated && (
-            <span className="text-emerald-500 dark:text-emerald-400 font-mono text-[9px] flex items-center gap-1 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/30">
-              <ShieldCheck className="w-3 h-3" />
-              ADMIN
-            </span>
+          {isMobile ? (
+            <button
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          ) : (
+            isAdminAuthenticated && (
+              <span className="text-emerald-500 dark:text-emerald-400 font-mono text-[9px] flex items-center gap-1 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                <ShieldCheck className="w-3 h-3" />
+                ADMIN
+              </span>
+            )
           )}
         </div>
 
@@ -124,7 +136,10 @@ export const Sidebar: React.FC = () => {
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  if (isMobile) setIsMobileMenuOpen(false);
+                }}
                 className={`group flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-all text-start cursor-pointer ${
                   isActive 
                     ? 'bg-[#C5A45B]/20 text-[#8E6A23] dark:text-[#DFBA6B] border border-[#C5A45B]/40 shadow-sm font-bold'
@@ -155,11 +170,14 @@ export const Sidebar: React.FC = () => {
         </nav>
       </div>
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2 mt-4">
         {/* Admin Quick Unlock Trigger Link */}
         {!isAdminAuthenticated && (
           <button
-            onClick={() => setShowLoginModal(true)}
+            onClick={() => {
+              setShowLoginModal(true);
+              if (isMobile) setIsMobileMenuOpen(false);
+            }}
             className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400 hover:text-[#8E6A23] dark:hover:text-[#DFBA6B] hover:border-[#C5A45B]/40 transition-colors cursor-pointer"
             title={isAr ? 'أو انقر 3 مرات متتالية على كلمة ASFROUTE بالأعلى' : 'Or triple-click ASFROUTE wordmark'}
           >
@@ -188,6 +206,28 @@ export const Sidebar: React.FC = () => {
           </div>
         </div>
       </div>
-    </aside>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Desktop Persistent Sidebar */}
+      <aside className="hidden lg:flex w-64 shrink-0 bg-white dark:bg-[#0A0E17] border-e border-slate-200 dark:border-slate-800/80 flex-col justify-between p-3 select-none text-slate-700 dark:text-slate-300 transition-colors duration-200">
+        {renderSidebarContent(false)}
+      </aside>
+
+      {/* Mobile Off-canvas Slide-out Drawer */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden flex">
+          <div 
+            className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity" 
+            onClick={() => setIsMobileMenuOpen(false)} 
+          />
+          <aside className="relative z-10 w-72 max-w-[85vw] h-full bg-white dark:bg-[#0A0E17] border-e border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col p-3 select-none text-slate-700 dark:text-slate-300 overflow-y-auto animate-in slide-in-from-right duration-200">
+            {renderSidebarContent(true)}
+          </aside>
+        </div>
+      )}
+    </>
   );
 };
