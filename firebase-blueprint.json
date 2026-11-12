@@ -1,0 +1,91 @@
+{
+  "entities": {
+    "SavedPlace": {
+      "title": "SavedPlace",
+      "description": "A place or marker saved on the interactive map",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier"
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the place or marker",
+          "maxLength": 100
+        },
+        "city": {
+          "type": "string",
+          "description": "City name",
+          "maxLength": 100
+        },
+        "latitude": {
+          "type": "number",
+          "description": "Latitude coordinate"
+        },
+        "longitude": {
+          "type": "number",
+          "description": "Longitude coordinate"
+        },
+        "layerType": {
+          "type": "string",
+          "enum": ["satellite", "streets", "radar"],
+          "description": "Map view mode"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional notes or description",
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Creator user ID or guest identifier",
+          "maxLength": 128
+        }
+      },
+      "required": ["name", "city", "latitude", "longitude", "createdAt"]
+    },
+    "WorkOrder": {
+      "title": "WorkOrder",
+      "description": "Field operation work order for crystal chandelier installation",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier"
+        },
+        "orderNumber": {
+          "type": "string",
+          "description": "Unique order code"
+        },
+        "status": {
+          "type": "string",
+          "description": "Work order state"
+        },
+        "customerNameAr": {
+          "type": "string",
+          "description": "Customer name in Arabic"
+        },
+        "customerPhone": {
+          "type": "string",
+          "description": "Contact phone"
+        }
+      },
+      "required": ["id", "orderNumber", "status"]
+    }
+  },
+  "firestore": {
+    "/saved_places/{placeId}": {
+      "schema": "SavedPlace",
+      "description": "Saved places and custom pins on the map"
+    },
+    "/work_orders/{orderId}": {
+      "schema": "WorkOrder",
+      "description": "Collection of operational work orders"
+    }
+  }
+}

@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { db, testConnection } from '../firebase';
+import { doc, setDoc } from 'firebase/firestore';
 import { 
   Language, 
   ThemeMode, 
@@ -296,16 +298,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try { return JSON.parse(saved); } catch {}
     }
     return {
-      projectId: 'asfour-crystal-fsm-prod',
-      apiKey: '',
-      authDomain: 'asfour-crystal-fsm-prod.firebaseapp.com',
-      storageBucket: 'asfour-crystal-fsm-prod.appspot.com',
-      messagingSenderId: '309004189655',
-      appId: '1:309004189655:web:88902b1f48c12a',
-      firestoreRegion: 'europe-west1',
+      projectId: 'gen-lang-client-0166670394',
+      apiKey: 'AIzaSyDOjwlSrwxkQM7wmEGslh6I8i4Wcyle6IU',
+      authDomain: 'gen-lang-client-0166670394.firebaseapp.com',
+      storageBucket: 'gen-lang-client-0166670394.firebasestorage.app',
+      messagingSenderId: '768691948096',
+      appId: '1:768691948096:web:61c681686f3807160eeda5',
+      firestoreRegion: 'europe-west2',
       isConnected: true,
-      lastTested: '2026-11-12 09:40:00',
-      syncCollections: ['work_orders', 'vehicles_telemetry', 'job_reports', 'signatures'],
+      lastTested: new Date().toISOString().replace('T', ' ').slice(0, 19),
+      syncCollections: ['work_orders', 'vehicles_telemetry', 'saved_places', 'event_logs'],
     };
   });
 
@@ -608,6 +610,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       'work_order',
       wo.id
     );
+
+    // Persist to Firebase Firestore
+    try {
+      setDoc(doc(db, 'work_orders', wo.id), {
+        ...wo,
+        createdAt: new Date().toISOString()
+      }, { merge: true }).catch(() => {});
+    } catch {}
   };
 
   const updateWorkOrder = (updatedWo: WorkOrder) => {
@@ -615,6 +625,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (selectedWorkOrder?.id === updatedWo.id) {
       setSelectedWorkOrder(updatedWo);
     }
+
+    // Persist update to Firebase Firestore
+    try {
+      setDoc(doc(db, 'work_orders', updatedWo.id), {
+        ...updatedWo,
+        updatedAt: new Date().toISOString()
+      }, { merge: true }).catch(() => {});
+    } catch {}
     addLiveLog(
       `تعديل أمر العمل: ${updatedWo.orderNumber}`,
       `Work Order Updated: ${updatedWo.orderNumber}`,
@@ -753,11 +771,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const testFirebaseConnection = async () => {
-    await new Promise(r => setTimeout(r, 950));
+    const isOk = await testConnection();
     const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
     const updated = {
       ...firebaseConfig,
-      isConnected: true,
+      isConnected: isOk,
       lastTested: nowStr
     };
     setFirebaseConfig(updated);

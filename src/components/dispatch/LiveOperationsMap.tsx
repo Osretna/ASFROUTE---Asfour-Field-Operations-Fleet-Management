@@ -16,7 +16,9 @@ import {
   ExternalLink,
   Target,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 interface LiveOperationsMapProps {
@@ -45,6 +47,8 @@ export const LiveOperationsMap: React.FC<LiveOperationsMapProps> = ({ onSelectWo
   const [selectedMapWo, setSelectedMapWo] = useState<WorkOrder | null>(workOrders[0] || null);
   const [clickedCoords, setClickedCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  // Hidden by default to avoid cluttering the map view as requested
+  const [isMenuExpanded, setIsMenuExpanded] = useState<boolean>(false);
 
   // Initialize real Leaflet Map
   useEffect(() => {
@@ -254,8 +258,8 @@ export const LiveOperationsMap: React.FC<LiveOperationsMapProps> = ({ onSelectWo
 
   return (
     <div className="flex flex-col h-full bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800/90 overflow-hidden shadow-2xl relative">
-      {/* Map Control Bar Top */}
-      <div className="absolute top-3 inset-x-3 z-[1000] flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+      {/* Map Header / Floating Controls */}
+      <div className="absolute top-3 inset-x-3 z-[1000] flex items-center justify-between pointer-events-none">
         {/* Title Badge */}
         <div className="flex items-center gap-2 pointer-events-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl text-xs font-bold text-slate-800 dark:text-slate-100">
           <Navigation className="w-4 h-4 text-[#C5A45B]" />
@@ -263,53 +267,93 @@ export const LiveOperationsMap: React.FC<LiveOperationsMapProps> = ({ onSelectWo
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse ml-1" />
         </div>
 
-        {/* Tile Layer Selector & Quick Views */}
-        <div className="flex items-center gap-1.5 pointer-events-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-1 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl text-xs">
+        {/* Toggle Button when menu is hidden (Keeps map uncluttered by default) */}
+        {!isMenuExpanded && (
           <button
-            onClick={() => setMapLayerType('dark')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-              mapLayerType === 'dark' ? 'bg-[#C5A45B] text-[#0D131D]' : 'text-slate-600 dark:text-slate-400 hover:text-white'
-            }`}
+            onClick={() => setIsMenuExpanded(true)}
+            className="pointer-events-auto flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white/95 dark:bg-[#0f172a]/95 hover:dark:bg-[#162035] backdrop-blur-md border border-slate-200 dark:border-[#263756] hover:border-[#C5A45B] text-slate-800 dark:text-slate-100 shadow-xl transition-all duration-200 text-xs font-bold group cursor-pointer"
+            title={isAr ? 'إظهار قوائم الطبقات والمدن' : 'Show Map Layers & Cities'}
           >
-            {isAr ? 'رادار' : 'Dark'}
+            <Layers className="w-3.5 h-3.5 text-[#C5A45B] group-hover:rotate-12 transition-transform" />
+            <span>{isAr ? 'عرض القوائم والمدن' : 'Map Controls'}</span>
+            <Eye className="w-3.5 h-3.5 text-[#C5A45B]" />
           </button>
-          <button
-            onClick={() => setMapLayerType('streets')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-              mapLayerType === 'streets' ? 'bg-[#C5A45B] text-[#0D131D]' : 'text-slate-600 dark:text-slate-400 hover:text-white'
-            }`}
-          >
-            {isAr ? 'شوارع' : 'Streets'}
-          </button>
-          <button
-            onClick={() => setMapLayerType('satellite')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-              mapLayerType === 'satellite' ? 'bg-[#C5A45B] text-[#0D131D]' : 'text-slate-600 dark:text-slate-400 hover:text-white'
-            }`}
-          >
-            {isAr ? 'قمر صناعي' : 'Satellite'}
-          </button>
-        </div>
+        )}
       </div>
 
-      {/* Region Quick Zoom Strip (Left Side) */}
-      <div className="absolute top-16 right-3 z-[1000] flex flex-col gap-1.5 pointer-events-auto">
-        {[
-          { labelAr: 'القاهرة الجديدة', labelEn: 'New Cairo', lat: 30.0131, lng: 31.4989 },
-          { labelAr: 'العاصمة الإدارية', labelEn: 'New Capital', lat: 30.0125, lng: 31.7500 },
-          { labelAr: 'الشيخ زايد', labelEn: 'Sheikh Zayed', lat: 30.0543, lng: 30.9856 },
-          { labelAr: 'العاشر من رمضان', labelEn: '10th of Ramadan', lat: 30.3012, lng: 31.7485 },
-          { labelAr: 'الإسكندرية', labelEn: 'Alexandria', lat: 31.2001, lng: 29.9187 }
-        ].map(r => (
-          <button
-            key={r.labelEn}
-            onClick={() => handleFlyTo(r.lat, r.lng, 12)}
-            className="px-2.5 py-1 rounded-lg bg-white/90 dark:bg-slate-900/90 hover:bg-[#C5A45B] hover:text-[#0D131D] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 text-[10px] font-bold shadow-md transition-all cursor-pointer text-end"
-          >
-            {isAr ? r.labelAr : r.labelEn}
-          </button>
-        ))}
-      </div>
+      {/* Expanded Floating Menu Widget (Shown only when toggled) */}
+      {isMenuExpanded && (
+        <div className="absolute top-3 right-3 z-[1000] flex flex-col items-end gap-2 pointer-events-auto max-w-[280px] animate-in fade-in slide-in-from-top-2 duration-200">
+          {/* Header & Close Button */}
+          <div className="w-full flex items-center justify-between px-3 py-1.5 rounded-xl bg-white/95 dark:bg-[#0f172a]/95 backdrop-blur-md border border-slate-200 dark:border-[#263756] text-xs shadow-md">
+            <span className="text-[11px] font-bold text-[#8E6A23] dark:text-[#DFBA6B] flex items-center gap-1.5">
+              <Compass className="w-3.5 h-3.5 text-[#C5A45B]" />
+              <span>{isAr ? 'طبقات ومدن الخريطة' : 'Layers & Cities'}</span>
+            </span>
+            <button
+              onClick={() => setIsMenuExpanded(false)}
+              className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white px-2 py-0.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              title={isAr ? 'إخفاء القوائم لتفريغ الخريطة' : 'Hide menus'}
+            >
+              <EyeOff className="w-3 h-3 text-[#C5A45B]" />
+              <span>{isAr ? 'إخفاء' : 'Hide'}</span>
+            </button>
+          </div>
+
+          {/* Tile Layer Selector Pills (رادار | شوارع | قمر صناعي) */}
+          <div className="flex items-center justify-between p-1 rounded-2xl bg-white/95 dark:bg-[#0f172a]/95 backdrop-blur-md border border-slate-200 dark:border-[#263756] shadow-xl w-full">
+            <button
+              onClick={() => setMapLayerType('dark')}
+              className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer text-center ${
+                mapLayerType === 'dark'
+                  ? 'bg-[#C5A45B] text-[#0D131D] shadow-md'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-white'
+              }`}
+            >
+              {isAr ? 'رادار' : 'Dark'}
+            </button>
+            <button
+              onClick={() => setMapLayerType('streets')}
+              className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer text-center ${
+                mapLayerType === 'streets'
+                  ? 'bg-[#C5A45B] text-[#0D131D] shadow-md'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-white'
+              }`}
+            >
+              {isAr ? 'شوارع' : 'Streets'}
+            </button>
+            <button
+              onClick={() => setMapLayerType('satellite')}
+              className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer text-center ${
+                mapLayerType === 'satellite'
+                  ? 'bg-[#C5A45B] text-[#0D131D] shadow-md'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-white'
+              }`}
+            >
+              {isAr ? 'قمر صناعي' : 'Satellite'}
+            </button>
+          </div>
+
+          {/* Region Quick Zoom Vertical Pill Stack */}
+          <div className="flex flex-col gap-1.5 w-full">
+            {[
+              { labelAr: 'القاهرة الجديدة', labelEn: 'New Cairo', lat: 30.0131, lng: 31.4989 },
+              { labelAr: 'العاصمة الإدارية', labelEn: 'New Capital', lat: 30.0125, lng: 31.7500 },
+              { labelAr: 'الشيخ زايد', labelEn: 'Sheikh Zayed', lat: 30.0543, lng: 30.9856 },
+              { labelAr: 'العاشر من رمضان', labelEn: '10th of Ramadan', lat: 30.3012, lng: 31.7485 },
+              { labelAr: 'الإسكندرية', labelEn: 'Alexandria', lat: 31.2001, lng: 29.9187 }
+            ].map(r => (
+              <button
+                key={r.labelEn}
+                onClick={() => handleFlyTo(r.lat, r.lng, 12)}
+                className="w-full py-2.5 px-4 rounded-2xl bg-white/90 dark:bg-[#10192e]/95 hover:bg-[#C5A45B] hover:text-[#0D131D] dark:hover:bg-[#17233e] dark:hover:border-[#C5A45B] text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-[#243556] text-xs font-bold shadow-lg transition-all cursor-pointer text-center"
+              >
+                {isAr ? r.labelAr : r.labelEn}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Real Leaflet Map Container */}
       <div ref={mapContainerRef} className="flex-1 w-full h-full z-0" />

@@ -314,3 +314,27 @@ export interface WhatsAppMessageLog {
   status: 'sent' | 'delivered' | 'received';
   locationCoordinates?: [number, number];
 }
+
+export type LayerType = 'satellite' | 'streets' | 'radar';
+
+export interface CityOption {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  zoom: number;
+  description?: string;
+}
+
+export interface SavedPlace {
+  id?: string;
+  name: string;
+  city: string;
+  latitude: number;
+  longitude: number;
+  layerType?: LayerType;
+  notes?: string;
+  createdAt: string;
+  userId?: string;
+}
+

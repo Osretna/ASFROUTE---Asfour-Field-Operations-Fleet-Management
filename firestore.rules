@@ -1,0 +1,44 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isValidPlace(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.city is string && data.city.size() <= 100
+        && data.latitude is number
+        && data.longitude is number
+        && data.createdAt is string;
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Saved map places collection
+    match /saved_places/{placeId} {
+      allow read: if true;
+      allow create: if isValidPlace(request.resource.data);
+      allow update: if isValidPlace(request.resource.data);
+      allow delete: if true;
+    }
+
+    // Work orders collection
+    match /work_orders/{orderId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Vehicles telemetry collection
+    match /vehicles/{vehicleId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Live event logs collection
+    match /event_logs/{logId} {
+      allow read: if true;
+      allow write: if true;
+    }
+  }
+}
