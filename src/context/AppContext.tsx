@@ -39,6 +39,13 @@ export type ActiveTab =
   | 'architecture'
   | 'admin';
 
+export type DetailEntityType = 'work_order' | 'vehicle' | 'technician' | 'team';
+
+export interface DetailModalState {
+  type: DetailEntityType;
+  data: any;
+}
+
 interface AppContextType {
   language: Language;
   setLanguage: (lang: Language) => void;
@@ -67,14 +74,42 @@ interface AppContextType {
   selectedTechnician: Technician | null;
   setSelectedTechnician: (t: Technician | null) => void;
 
-  // Actions
+  // CRUD Actions
+  addVehicle: (v: Vehicle) => void;
+  updateVehicle: (v: Vehicle) => void;
+  deleteVehicle: (id: string) => void;
+
+  addTechnician: (t: Technician) => void;
+  updateTechnician: (t: Technician) => void;
+  deleteTechnician: (id: string) => void;
+
+  addTeam: (team: InstallationTeam) => void;
+  updateTeam: (team: InstallationTeam) => void;
+  deleteTeam: (id: string) => void;
+
+  addWorkOrder: (wo: WorkOrder) => void;
+  updateWorkOrder: (wo: WorkOrder) => void;
+  deleteWorkOrder: (id: string) => void;
+
+  addProjectBuilding: (proj: ProjectBuilding) => void;
+  updateProjectBuilding: (proj: ProjectBuilding) => void;
+  deleteProjectBuilding: (id: string) => void;
+  addChandelierUnit: (buildingId: string, zoneId: string, unit: { unitNameAr: string; unitNameEn: string; modelNumber: string; assignedTechAr: string; assignedTechEn: string }) => void;
+  deleteChandelierUnit: (buildingId: string, zoneId: string, unitId: string) => void;
+
+  // State transitions & optimization
   updateWorkOrderStatus: (workOrderId: string, nextStatus: WorkOrderStatus) => void;
   reassignWorkOrder: (workOrderId: string, vehicleId: string, teamId: string, reason: string) => { success: boolean; message: string };
   runAutoScheduleOptimizer: () => Promise<void>;
   isOptimizing: boolean;
   addLiveLog: (titleAr: string, titleEn: string, descAr: string, descEn: string, severity: LiveEventLog['severity'], entityType: LiveEventLog['entityType'], entityId: string) => void;
   
-  // Quick inspection modals
+  // Presentation Detail Modal
+  detailModalState: DetailModalState | null;
+  openDetailModal: (type: DetailEntityType, data: any) => void;
+  closeDetailModal: () => void;
+
+  // Certificate Modal
   certificateModalWo: WorkOrder | null;
   setCertificateModalWo: (wo: WorkOrder | null) => void;
 
@@ -112,19 +147,86 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeBranchId, setActiveBranchId] = useState<BranchId | 'all'>('all');
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
 
-  const [vehicles, setVehicles] = useState<Vehicle[]>(INITIAL_VEHICLES);
-  const [technicians, setTechnicians] = useState<Technician[]>(INITIAL_TECHNICIANS);
-  const [teams, setTeams] = useState<InstallationTeam[]>(INITIAL_TEAMS);
-  const [workOrders, setWorkOrders] = useState<WorkOrder[]>(INITIAL_WORK_ORDERS);
+  // Load saved entities from localStorage if present
+  const [vehicles, setVehicles] = useState<Vehicle[]>(() => {
+    const saved = localStorage.getItem('asfroute_vehicles');
+    if (saved) {
+      try { return JSON.parse(saved); } catch {}
+    }
+    return INITIAL_VEHICLES;
+  });
+
+  const [technicians, setTechnicians] = useState<Technician[]>(() => {
+    const saved = localStorage.getItem('asfroute_technicians');
+    if (saved) {
+      try { return JSON.parse(saved); } catch {}
+    }
+    return INITIAL_TECHNICIANS;
+  });
+
+  const [teams, setTeams] = useState<InstallationTeam[]>(() => {
+    const saved = localStorage.getItem('asfroute_teams');
+    if (saved) {
+      try { return JSON.parse(saved); } catch {}
+    }
+    return INITIAL_TEAMS;
+  });
+
+  const [workOrders, setWorkOrders] = useState<WorkOrder[]>(() => {
+    const saved = localStorage.getItem('asfroute_workorders');
+    if (saved) {
+      try { return JSON.parse(saved); } catch {}
+    }
+    return INITIAL_WORK_ORDERS;
+  });
+
   const [ganttBlocks, setGanttBlocks] = useState<GanttTaskBlock[]>(INITIAL_GANTT_BLOCKS);
   const [eventLogs, setEventLogs] = useState<LiveEventLog[]>(INITIAL_EVENT_LOGS);
-  const [projectBuildings, setProjectBuildings] = useState<ProjectBuilding[]>(INITIAL_PROJECT_BUILDINGS);
+  const [projectBuildings, setProjectBuildings] = useState<ProjectBuilding[]>(() => {
+    const saved = localStorage.getItem('asfroute_projects');
+    if (saved) {
+      try { return JSON.parse(saved); } catch {}
+    }
+    return INITIAL_PROJECT_BUILDINGS;
+  });
 
   const [selectedWorkOrder, setSelectedWorkOrder] = useState<WorkOrder | null>(INITIAL_WORK_ORDERS[0]);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(INITIAL_VEHICLES[0]);
   const [selectedTechnician, setSelectedTechnician] = useState<Technician | null>(INITIAL_TECHNICIANS[0]);
   const [isOptimizing, setIsOptimizing] = useState<boolean>(false);
   const [certificateModalWo, setCertificateModalWo] = useState<WorkOrder | null>(null);
+
+  // Presentation Detail Modal State
+  const [detailModalState, setDetailModalState] = useState<DetailModalState | null>(null);
+
+  const openDetailModal = (type: DetailEntityType, data: any) => {
+    setDetailModalState({ type, data });
+  };
+
+  const closeDetailModal = () => {
+    setDetailModalState(null);
+  };
+
+  // Sync entities with localStorage
+  useEffect(() => {
+    localStorage.setItem('asfroute_vehicles', JSON.stringify(vehicles));
+  }, [vehicles]);
+
+  useEffect(() => {
+    localStorage.setItem('asfroute_technicians', JSON.stringify(technicians));
+  }, [technicians]);
+
+  useEffect(() => {
+    localStorage.setItem('asfroute_teams', JSON.stringify(teams));
+  }, [teams]);
+
+  useEffect(() => {
+    localStorage.setItem('asfroute_workorders', JSON.stringify(workOrders));
+  }, [workOrders]);
+
+  useEffect(() => {
+    localStorage.setItem('asfroute_projects', JSON.stringify(projectBuildings));
+  }, [projectBuildings]);
 
   // Admin Auth State
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
@@ -134,7 +236,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [clickCount, setClickCount] = useState<number>(0);
   const [lastClickTime, setLastClickTime] = useState<number>(0);
 
-  // Cloud Configs (with initial sensible enterprise placeholders)
+  // Cloud Configs
   const [sqlConfig, setSqlConfigState] = useState<SqlDatabaseConfig>(() => {
     const saved = localStorage.getItem('asfroute_sql_config');
     if (saved) {
@@ -286,7 +388,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLastClickTime(now);
   };
 
-  // Admin login check: Case-insensitive username check!
   const loginAdmin = (username: string, password: string): boolean => {
     const normalizedUser = username.trim().toLowerCase();
     if (normalizedUser === 'admin' && password === 'admin1234') {
@@ -315,6 +416,270 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (activeTab === 'admin') {
       setActiveTab('dashboard');
     }
+  };
+
+  // ---------------- CRUD HANDLERS ----------------
+
+  // Vehicles
+  const addVehicle = (v: Vehicle) => {
+    setVehicles(prev => [v, ...prev]);
+    addLiveLog(
+      `إضافة شاحنة جديدة للأسطول: ${v.plateNumber}`,
+      `New Fleet Vehicle Added: ${v.plateNumberEn}`,
+      `تم تسجيل الشاحنة ${v.model} بحمولة ${v.maxWeightKg} كجم ونظام تعليق ${v.hasPneumaticDamping ? 'هوائي' : 'قياسي'}`,
+      `Registered ${v.model} with payload ${v.maxWeightKg}kg`,
+      'success',
+      'vehicle',
+      v.id
+    );
+  };
+
+  const updateVehicle = (updatedV: Vehicle) => {
+    setVehicles(prev => prev.map(v => v.id === updatedV.id ? updatedV : v));
+    if (selectedVehicle?.id === updatedV.id) {
+      setSelectedVehicle(updatedV);
+    }
+    addLiveLog(
+      `تحديث بيانات الشاحنة: ${updatedV.id}`,
+      `Vehicle Updated: ${updatedV.id}`,
+      `تم تحديث بيانات ومواصفات الشاحنة ${updatedV.plateNumber}`,
+      `Updated specs for ${updatedV.plateNumberEn}`,
+      'info',
+      'vehicle',
+      updatedV.id
+    );
+  };
+
+  const deleteVehicle = (id: string) => {
+    const v = vehicles.find(item => item.id === id);
+    setVehicles(prev => prev.filter(item => item.id !== id));
+    if (selectedVehicle?.id === id) {
+      setSelectedVehicle(vehicles[0] || null);
+    }
+    addLiveLog(
+      `حذف شاحنة من الأسطول: ${id}`,
+      `Vehicle Decommissioned: ${id}`,
+      `تم استبعاد الشاحنة ${v?.plateNumber || id} من العمليات الميدانية`,
+      `Decommissioned vehicle ${id} from operations`,
+      'warning',
+      'vehicle',
+      id
+    );
+  };
+
+  // Technicians
+  const addTechnician = (t: Technician) => {
+    setTechnicians(prev => [t, ...prev]);
+    addLiveLog(
+      `إضافة فني / مهندس جديد: ${t.nameAr}`,
+      `New Technician Registered: ${t.nameEn}`,
+      `تم اعتماد الفني برقم ${t.id} ومستوى مهارة L5`,
+      `Registered technician ${t.id} with verified certifications`,
+      'success',
+      'team',
+      t.id
+    );
+  };
+
+  const updateTechnician = (updatedT: Technician) => {
+    setTechnicians(prev => prev.map(t => t.id === updatedT.id ? updatedT : t));
+    if (selectedTechnician?.id === updatedT.id) {
+      setSelectedTechnician(updatedT);
+    }
+    addLiveLog(
+      `تحديث ملف الفني: ${updatedT.nameAr}`,
+      `Technician Profile Updated: ${updatedT.nameEn}`,
+      `تم تحديث التراخيص والتقييم الميداني للفني ${updatedT.id}`,
+      `Updated credentials and rating for ${updatedT.id}`,
+      'info',
+      'team',
+      updatedT.id
+    );
+  };
+
+  const deleteTechnician = (id: string) => {
+    const t = technicians.find(item => item.id === id);
+    setTechnicians(prev => prev.filter(item => item.id !== id));
+    if (selectedTechnician?.id === id) {
+      setSelectedTechnician(technicians[0] || null);
+    }
+    addLiveLog(
+      `حذف فني من السجل: ${id}`,
+      `Technician Removed: ${id}`,
+      `تم حذف الفني ${t?.nameAr || id} من سجلات الميدان`,
+      `Removed technician ${id} from active roster`,
+      'warning',
+      'team',
+      id
+    );
+  };
+
+  // Teams
+  const addTeam = (team: InstallationTeam) => {
+    setTeams(prev => [team, ...prev]);
+    addLiveLog(
+      `تكوين فريق تركيب جديد: ${team.nameAr}`,
+      `New Installation Team Assembled: ${team.nameEn}`,
+      `تم ربط الفريق بالشاحنة ${team.assignedVehicleId} وسقف ارتفاع ${team.maxHeightAuthorizedM}م`,
+      `Assigned team to vehicle ${team.assignedVehicleId}`,
+      'success',
+      'team',
+      team.id
+    );
+  };
+
+  const updateTeam = (updatedTeam: InstallationTeam) => {
+    setTeams(prev => prev.map(t => t.id === updatedTeam.id ? updatedTeam : t));
+  };
+
+  const deleteTeam = (id: string) => {
+    setTeams(prev => prev.filter(t => t.id !== id));
+  };
+
+  // Work Orders
+  const addWorkOrder = (wo: WorkOrder) => {
+    setWorkOrders(prev => [wo, ...prev]);
+    
+    // Also create Gantt block if scheduled
+    if (wo.assignedVehicleId) {
+      const newBlock: GanttTaskBlock = {
+        id: `GNT-${Date.now()}`,
+        workOrderId: wo.id,
+        resourceId: wo.assignedVehicleId,
+        resourceType: 'vehicle',
+        titleAr: `تركيب: ${wo.customerNameAr}`,
+        titleEn: `Install: ${wo.customerNameEn}`,
+        startHour: 9.0,
+        durationHours: wo.estimatedDurationHours || 4.5,
+        type: 'assembly',
+        status: 'planned',
+        hasConflict: false
+      };
+      setGanttBlocks(prev => [...prev, newBlock]);
+    }
+
+    addLiveLog(
+      `إنشاء أمر عمل جديد: ${wo.orderNumber}`,
+      `New Work Order Created: ${wo.orderNumber}`,
+      `تم تسجيل تركيب ثريا ${wo.chandelier.modelNameAr} لصالح ${wo.customerNameAr}`,
+      `Created installation order for ${wo.customerNameEn}`,
+      'success',
+      'work_order',
+      wo.id
+    );
+  };
+
+  const updateWorkOrder = (updatedWo: WorkOrder) => {
+    setWorkOrders(prev => prev.map(w => w.id === updatedWo.id ? updatedWo : w));
+    if (selectedWorkOrder?.id === updatedWo.id) {
+      setSelectedWorkOrder(updatedWo);
+    }
+    addLiveLog(
+      `تعديل أمر العمل: ${updatedWo.orderNumber}`,
+      `Work Order Updated: ${updatedWo.orderNumber}`,
+      `تم تعديل مواصفات وبيانات أمر العمل ${updatedWo.customerNameAr}`,
+      `Updated work order details for ${updatedWo.orderNumber}`,
+      'info',
+      'work_order',
+      updatedWo.id
+    );
+  };
+
+  const deleteWorkOrder = (id: string) => {
+    const wo = workOrders.find(w => w.id === id);
+    setWorkOrders(prev => prev.filter(w => w.id !== id));
+    setGanttBlocks(prev => prev.filter(b => b.workOrderId !== id));
+    if (selectedWorkOrder?.id === id) {
+      setSelectedWorkOrder(workOrders[0] || null);
+    }
+    addLiveLog(
+      `حذف أمر العمل: ${id}`,
+      `Work Order Deleted: ${id}`,
+      `تم إلغاء وحذف أمر العمل ${wo?.orderNumber || id}`,
+      `Deleted work order ${wo?.orderNumber || id}`,
+      'warning',
+      'work_order',
+      id
+    );
+  };
+
+  // Projects
+  const addProjectBuilding = (proj: ProjectBuilding) => {
+    setProjectBuildings(prev => [proj, ...prev]);
+    addLiveLog(
+      `إضافة مشروع / مبنى فندقي جديد: ${proj.nameAr}`,
+      `New Palatial Project Added: ${proj.nameEn}`,
+      `تم تسجيل المبنى بإجمالي ${proj.totalChandelierUnits} وحدة إضاءة و ${proj.floorsCount} طوابق`,
+      `Registered building with ${proj.totalChandelierUnits} chandelier units across ${proj.floorsCount} floors`,
+      'success',
+      'safety',
+      proj.id
+    );
+  };
+
+  const updateProjectBuilding = (updatedProj: ProjectBuilding) => {
+    setProjectBuildings(prev => prev.map(p => p.id === updatedProj.id ? updatedProj : p));
+  };
+
+  const deleteProjectBuilding = (id: string) => {
+    setProjectBuildings(prev => prev.filter(p => p.id !== id));
+  };
+
+  const addChandelierUnit = (
+    buildingId: string, 
+    zoneId: string, 
+    unit: { unitNameAr: string; unitNameEn: string; modelNumber: string; assignedTechAr: string; assignedTechEn: string }
+  ) => {
+    setProjectBuildings(prev => prev.map(bld => {
+      if (bld.id === buildingId) {
+        const newUnit = {
+          id: `UNT-${Date.now()}`,
+          unitNameAr: unit.unitNameAr,
+          unitNameEn: unit.unitNameEn,
+          modelNumber: unit.modelNumber,
+          status: 'pending' as const,
+          assignedTechAr: unit.assignedTechAr,
+          assignedTechEn: unit.assignedTechEn
+        };
+        const updatedZones = bld.zones.map(z => {
+          if (z.id === zoneId) {
+            return {
+              ...z,
+              units: [...z.units, newUnit]
+            };
+          }
+          return z;
+        });
+        return {
+          ...bld,
+          totalChandelierUnits: bld.totalChandelierUnits + 1,
+          zones: updatedZones
+        };
+      }
+      return bld;
+    }));
+  };
+
+  const deleteChandelierUnit = (buildingId: string, zoneId: string, unitId: string) => {
+    setProjectBuildings(prev => prev.map(bld => {
+      if (bld.id === buildingId) {
+        const updatedZones = bld.zones.map(z => {
+          if (z.id === zoneId) {
+            return {
+              ...z,
+              units: z.units.filter(u => u.id !== unitId)
+            };
+          }
+          return z;
+        });
+        return {
+          ...bld,
+          totalChandelierUnits: Math.max(0, bld.totalChandelierUnits - 1),
+          zones: updatedZones
+        };
+      }
+      return bld;
+    }));
   };
 
   // Test Connection Simulators
@@ -598,11 +963,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSelectedVehicle,
       selectedTechnician,
       setSelectedTechnician,
+
+      // CRUD
+      addVehicle,
+      updateVehicle,
+      deleteVehicle,
+      addTechnician,
+      updateTechnician,
+      deleteTechnician,
+      addTeam,
+      updateTeam,
+      deleteTeam,
+      addWorkOrder,
+      updateWorkOrder,
+      deleteWorkOrder,
+      addProjectBuilding,
+      updateProjectBuilding,
+      deleteProjectBuilding,
+      addChandelierUnit,
+      deleteChandelierUnit,
+
+      // State Transitions
       updateWorkOrderStatus,
       reassignWorkOrder,
       runAutoScheduleOptimizer,
       isOptimizing,
       addLiveLog,
+
+      // Detail Modal
+      detailModalState,
+      openDetailModal,
+      closeDetailModal,
+
+      // Certificate Modal
       certificateModalWo,
       setCertificateModalWo,
 

@@ -13,6 +13,7 @@ import { ArchitectureViewer } from './components/architecture/ArchitectureViewer
 import { DigitalCertificateModal } from './components/workorders/DigitalCertificateModal';
 import { AdminControlPanel } from './components/admin/AdminControlPanel';
 import { AdminLoginModal } from './components/admin/AdminLoginModal';
+import { IndependentDetailModal } from './components/common/IndependentDetailModal';
 
 const MainLayout: React.FC = () => {
   const { activeTab, certificateModalWo, setCertificateModalWo, language } = useApp();
@@ -39,6 +40,7 @@ const MainLayout: React.FC = () => {
 
       {/* Global Modals */}
       <AdminLoginModal />
+      <IndependentDetailModal />
 
       {certificateModalWo && (
         <DigitalCertificateModal

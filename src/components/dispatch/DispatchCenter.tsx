@@ -21,6 +21,8 @@ import {
   Calendar
 } from 'lucide-react';
 
+import { WorkOrderModal } from '../workorders/WorkOrderModal';
+
 export const DispatchCenter: React.FC = () => {
   const { 
     language, 
@@ -39,6 +41,7 @@ export const DispatchCenter: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'available'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [reassignModalWo, setReassignModalWo] = useState<WorkOrder | null>(null);
+  const [workOrderModalOpen, setWorkOrderModalOpen] = useState(false);
   const [mapCollapsed, setMapCollapsed] = useState(false);
 
   // Filter resources
@@ -88,10 +91,17 @@ export const DispatchCenter: React.FC = () => {
         {/* Global Dispatch Actions */}
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setWorkOrderModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-[#C5A45B] hover:bg-[#D4B36A] text-[#0D131D] transition-transform active:scale-95 shadow-md shadow-[#C5A45B]/20 cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>{isAr ? 'إضافة أمر عمل جديد' : 'New Work Order'}</span>
+          </button>
+
+          <button
             onClick={() => setReassignModalWo(workOrders[0])}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5 text-[#C5A45B]" />
             <span>{isAr ? 'جدولة يدوية / استبدال' : 'Manual Assign / Swap'}</span>
           </button>
 
@@ -274,6 +284,13 @@ export const DispatchCenter: React.FC = () => {
         <ReassignModal
           workOrder={reassignModalWo}
           onClose={() => setReassignModalWo(null)}
+        />
+      )}
+
+      {/* Work Order Modal (Create / Edit) */}
+      {workOrderModalOpen && (
+        <WorkOrderModal
+          onClose={() => setWorkOrderModalOpen(false)}
         />
       )}
     </div>

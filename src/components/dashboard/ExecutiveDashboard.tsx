@@ -25,7 +25,8 @@ export const ExecutiveDashboard: React.FC = () => {
     eventLogs, 
     setActiveTab, 
     runAutoScheduleOptimizer,
-    isOptimizing 
+    isOptimizing,
+    openDetailModal 
   } = useApp();
 
   const isAr = language === 'ar';
@@ -91,9 +92,13 @@ export const ExecutiveDashboard: React.FC = () => {
       {/* KPI Cards Strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
         {/* Vehicles */}
-        <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800/80 flex flex-col justify-between hover:border-slate-700 transition-colors">
+        <div 
+          onClick={() => vehicles[0] && openDetailModal('vehicle', vehicles[0])}
+          className="p-4 rounded-xl bg-slate-900/80 border border-slate-800/80 flex flex-col justify-between hover:border-[#C5A45B]/60 transition-colors cursor-pointer group"
+          title={isAr ? 'انقر لعرض شاشة تفاصيل الشاحنة' : 'Click to inspect vehicle'}
+        >
           <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-semibold">{isAr ? 'شاحنات النقل' : 'Fleet Vehicles'}</span>
+            <span className="text-xs font-semibold group-hover:text-[#DFBA6B] transition-colors">{isAr ? 'شاحنات النقل' : 'Fleet Vehicles'}</span>
             <Truck className="w-4 h-4 text-blue-400" />
           </div>
           <div className="mt-3 flex items-baseline gap-2">
@@ -107,9 +112,13 @@ export const ExecutiveDashboard: React.FC = () => {
         </div>
 
         {/* Technicians */}
-        <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800/80 flex flex-col justify-between hover:border-slate-700 transition-colors">
+        <div 
+          onClick={() => technicians[0] && openDetailModal('technician', technicians[0])}
+          className="p-4 rounded-xl bg-slate-900/80 border border-slate-800/80 flex flex-col justify-between hover:border-[#C5A45B]/60 transition-colors cursor-pointer group"
+          title={isAr ? 'انقر لعرض شاشة تفاصيل الفني' : 'Click to inspect technician'}
+        >
           <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-semibold">{isAr ? 'فنيي ومهندسي التركيب' : 'Installation Technicians'}</span>
+            <span className="text-xs font-semibold group-hover:text-[#DFBA6B] transition-colors">{isAr ? 'فنيي ومهندسي التركيب' : 'Installation Technicians'}</span>
             <Users className="w-4 h-4 text-[#C5A45B]" />
           </div>
           <div className="mt-3 flex items-baseline gap-2">
@@ -123,9 +132,13 @@ export const ExecutiveDashboard: React.FC = () => {
         </div>
 
         {/* Work Orders Today */}
-        <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800/80 flex flex-col justify-between hover:border-slate-700 transition-colors">
+        <div 
+          onClick={() => workOrders[0] && openDetailModal('work_order', workOrders[0])}
+          className="p-4 rounded-xl bg-slate-900/80 border border-slate-800/80 flex flex-col justify-between hover:border-[#C5A45B]/60 transition-colors cursor-pointer group"
+          title={isAr ? 'انقر لعرض شاشة تفاصيل أمر العمل' : 'Click to inspect work order'}
+        >
           <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-semibold">{isAr ? 'مهام اليوم' : 'Today Tasks'}</span>
+            <span className="text-xs font-semibold group-hover:text-[#DFBA6B] transition-colors">{isAr ? 'مهام اليوم' : 'Today Tasks'}</span>
             <CalendarCheck className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="mt-3 flex items-baseline gap-2">
@@ -195,8 +208,9 @@ export const ExecutiveDashboard: React.FC = () => {
               {workOrders.slice(0, 4).map(wo => (
                 <div 
                   key={wo.id}
-                  onClick={() => setActiveTab('workorders')}
+                  onClick={() => openDetailModal('work_order', wo)}
                   className="flex items-center justify-between p-3 rounded-lg bg-slate-950/60 border border-slate-800 hover:border-[#C5A45B]/50 transition-colors cursor-pointer group"
+                  title={isAr ? 'انقر لفتح كامل التفاصيل بشاشة مستقلة' : 'Click to inspect in separate screen'}
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg bg-[#C5A45B]/15 border border-[#C5A45B]/30 flex items-center justify-center text-[#DFBA6B] text-xs font-bold font-mono shrink-0">

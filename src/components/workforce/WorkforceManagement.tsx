@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Technician, InstallationTeam } from '../../types';
+import { TechnicianModal } from './TechnicianModal';
 import { 
   Users, 
   Award, 
@@ -12,15 +13,55 @@ import {
   CheckCircle2, 
   Sparkles,
   Calendar,
-  Layers
+  Layers,
+  Plus,
+  Edit2,
+  Trash2,
+  Eye
 } from 'lucide-react';
 
 export const WorkforceManagement: React.FC = () => {
-  const { language, technicians, teams } = useApp();
+  const { language, technicians, teams, deleteTechnician, deleteTeam, openDetailModal } = useApp();
   const isAr = language === 'ar';
 
-  const [selectedTech, setSelectedTech] = useState<Technician>(technicians[0]);
+  const [selectedTech, setSelectedTech] = useState<Technician>(technicians[0] || {} as Technician);
   const [activeSubTab, setActiveSubTab] = useState<'technicians' | 'matrix' | 'teams'>('technicians');
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'technician' | 'team'>('technician');
+  const [techToEdit, setTechToEdit] = useState<Technician | null>(null);
+
+  const handleOpenAddTech = () => {
+    setTechToEdit(null);
+    setModalMode('technician');
+    setModalOpen(true);
+  };
+
+  const handleOpenAddTeam = () => {
+    setModalMode('team');
+    setModalOpen(true);
+  };
+
+  const handleEditTech = (t: Technician, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTechToEdit(t);
+    setModalMode('technician');
+    setModalOpen(true);
+  };
+
+  const handleDeleteTech = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm(isAr ? 'هل أنت متأكد من حذف هذا الفني من السجلات الميدانية؟' : 'Are you sure you want to remove this technician?')) {
+      deleteTechnician(id);
+    }
+  };
+
+  const handleDeleteTeam = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm(isAr ? 'هل أنت متأكد من حل وحذف هذا الفريق؟' : 'Are you sure you want to disassemble this team?')) {
+      deleteTeam(id);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full overflow-hidden p-6 max-w-7xl mx-auto w-full gap-5 text-slate-100">
@@ -40,31 +81,41 @@ export const WorkforceManagement: React.FC = () => {
           </p>
         </div>
 
-        {/* View Switcher */}
-        <div className="flex items-center gap-1 p-1 bg-slate-900 rounded-lg border border-slate-800 text-xs">
+        {/* View Switcher & Action Buttons */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 p-1 bg-slate-900 rounded-lg border border-slate-800 text-xs">
+            <button
+              onClick={() => setActiveSubTab('technicians')}
+              className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer ${
+                activeSubTab === 'technicians' ? 'bg-[#C5A45B] text-[#0D131D] font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {isAr ? 'سجل الفنيين' : 'Technicians'}
+            </button>
+            <button
+              onClick={() => setActiveSubTab('matrix')}
+              className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer ${
+                activeSubTab === 'matrix' ? 'bg-[#C5A45B] text-[#0D131D] font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {isAr ? 'مصفوفة الكفاءات' : 'Skill Matrix'}
+            </button>
+            <button
+              onClick={() => setActiveSubTab('teams')}
+              className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer ${
+                activeSubTab === 'teams' ? 'bg-[#C5A45B] text-[#0D131D] font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {isAr ? 'الفِرق (Teams)' : 'Teams'}
+            </button>
+          </div>
+
           <button
-            onClick={() => setActiveSubTab('technicians')}
-            className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer ${
-              activeSubTab === 'technicians' ? 'bg-[#C5A45B] text-[#0D131D] font-bold' : 'text-slate-400 hover:text-white'
-            }`}
+            onClick={activeSubTab === 'teams' ? handleOpenAddTeam : handleOpenAddTech}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold bg-[#C5A45B] hover:bg-[#D4B36A] text-[#0D131D] transition-transform active:scale-95 shadow-md shadow-[#C5A45B]/20 cursor-pointer"
           >
-            {isAr ? 'سجل الفنيين والمهندسين' : 'Technicians Roster'}
-          </button>
-          <button
-            onClick={() => setActiveSubTab('matrix')}
-            className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer ${
-              activeSubTab === 'matrix' ? 'bg-[#C5A45B] text-[#0D131D] font-bold' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            {isAr ? 'مصفوفة الكفاءات (Skill Matrix)' : 'Skill Matrix'}
-          </button>
-          <button
-            onClick={() => setActiveSubTab('teams')}
-            className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer ${
-              activeSubTab === 'teams' ? 'bg-[#C5A45B] text-[#0D131D] font-bold' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            {isAr ? 'الفِرق المتكاملة (Teams)' : 'Installation Teams'}
+            <Plus className="w-4 h-4" />
+            <span>{activeSubTab === 'teams' ? (isAr ? 'تكوين فريق جديد' : 'Assemble Team') : (isAr ? 'إضافة فني جديد' : 'Add Technician')}</span>
           </button>
         </div>
       </div>
@@ -75,13 +126,13 @@ export const WorkforceManagement: React.FC = () => {
           {/* Techs List */}
           <div className="lg:col-span-2 overflow-y-auto flex flex-col gap-3 pe-1">
             {technicians.map((tech) => {
-              const isSelected = selectedTech.id === tech.id;
+              const isSelected = selectedTech?.id === tech.id;
 
               return (
                 <div
                   key={tech.id}
                   onClick={() => setSelectedTech(tech)}
-                  className={`p-4 rounded-xl border transition-all cursor-pointer flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
+                  className={`p-4 rounded-xl border transition-all cursor-pointer flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 group ${
                     isSelected 
                       ? 'bg-slate-900 border-[#C5A45B] shadow-lg shadow-[#C5A45B]/10' 
                       : 'bg-slate-950/70 border-slate-800/80 hover:border-slate-700'
@@ -117,15 +168,35 @@ export const WorkforceManagement: React.FC = () => {
                   </div>
 
                   <div className="flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto gap-2">
-                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-md border ${
-                      tech.status === 'on_site' 
-                        ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' 
-                        : tech.status === 'en_route'
-                        ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
-                        : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                    }`}>
-                      {tech.status.replace(/_/g, ' ').toUpperCase()}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-md border ${
+                        tech.status === 'on_site' 
+                          ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' 
+                          : tech.status === 'en_route'
+                          ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                          : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                      }`}>
+                        {tech.status.replace(/_/g, ' ').toUpperCase()}
+                      </span>
+
+                      {/* Edit / Delete Buttons */}
+                      <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => handleEditTech(tech, e)}
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-[#C5A45B] hover:text-[#0D131D] text-slate-300 transition-colors cursor-pointer"
+                          title={isAr ? 'تعديل الفني' : 'Edit Technician'}
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={(e) => handleDeleteTech(tech.id, e)}
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-red-600 hover:text-white text-slate-400 transition-colors cursor-pointer"
+                          title={isAr ? 'حذف الفني' : 'Delete Technician'}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
                     <span className="text-[11px] text-slate-400 font-mono">
                       {tech.phoneNumber}
                     </span>
@@ -136,77 +207,95 @@ export const WorkforceManagement: React.FC = () => {
           </div>
 
           {/* Right: Selected Technician Certification Profile */}
-          <div className="bg-slate-900/90 rounded-xl border border-slate-800 p-5 flex flex-col justify-between overflow-y-auto">
-            <div>
-              <div className="flex items-center gap-3.5 pb-4 border-b border-slate-800">
-                <img
-                  src={selectedTech.avatar}
-                  alt={selectedTech.nameEn}
-                  className="w-14 h-14 rounded-xl object-cover border border-[#C5A45B]/50 shadow-md"
-                />
-                <div>
-                  <h3 className="text-base font-bold text-white">
-                    {isAr ? selectedTech.nameAr : selectedTech.nameEn}
-                  </h3>
-                  <span className="text-xs text-[#DFBA6B] block">
-                    {isAr ? selectedTech.roleAr : selectedTech.roleEn}
-                  </span>
-                  <span className="text-[11px] font-mono text-slate-400 mt-1 block">
-                    {selectedTech.phoneNumber}
-                  </span>
-                </div>
-              </div>
-
-              {/* Badges / Certifications */}
-              <div className="my-4 flex flex-col gap-3">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-200">
-                  <span className="flex items-center gap-1.5">
-                    <Award className="w-4 h-4 text-[#C5A45B]" />
-                    <span>{isAr ? 'الشهادات والاعتمادات الميدانية' : 'Active Certifications'}</span>
-                  </span>
-                  <span className="text-[10px] text-emerald-400 font-mono">VERIFIED</span>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  {selectedTech.certifications.map(cert => (
-                    <div key={cert.skillId} className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex flex-col gap-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-200">
-                          {isAr ? cert.skillNameAr : cert.skillNameEn}
-                        </span>
-                        <span className="text-xs font-mono font-bold text-[#DFBA6B]">
-                          Level {cert.level}/5
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                        <span>{isAr ? 'صالحة حتى:' : 'Expires:'} {cert.expiryDate}</span>
-                        <span className="text-emerald-400">
-                          {cert.isHighAltitudeCertified ? `Scaffold: Up to ${cert.maxWorkHeightMeters}m` : 'Ground Level'}
-                        </span>
-                      </div>
+          {selectedTech && (
+            <div className="bg-slate-900/90 rounded-xl border border-slate-800 p-5 flex flex-col justify-between overflow-y-auto">
+              <div>
+                <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+                  <div className="flex items-center gap-3.5">
+                    <img
+                      src={selectedTech.avatar}
+                      alt={selectedTech.nameEn}
+                      className="w-14 h-14 rounded-xl object-cover border border-[#C5A45B]/50 shadow-md"
+                    />
+                    <div>
+                      <h3 className="text-base font-bold text-white">
+                        {isAr ? selectedTech.nameAr : selectedTech.nameEn}
+                      </h3>
+                      <span className="text-xs text-[#DFBA6B] block">
+                        {isAr ? selectedTech.roleAr : selectedTech.roleEn}
+                      </span>
+                      <span className="text-[11px] font-mono text-slate-400 mt-1 block">
+                        {selectedTech.phoneNumber}
+                      </span>
                     </div>
-                  ))}
+                  </div>
+
+                  <button
+                    onClick={() => openDetailModal('technician', selectedTech)}
+                    className="p-1.5 rounded bg-slate-800 hover:bg-[#C5A45B] hover:text-[#0D131D] text-slate-300 cursor-pointer"
+                    title={isAr ? 'عرض بشاشة مستقلة' : 'Open in Separate Screen'}
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Badges / Certifications */}
+                <div className="my-4 flex flex-col gap-3">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-200">
+                    <span className="flex items-center gap-1.5">
+                      <Award className="w-4 h-4 text-[#C5A45B]" />
+                      <span>{isAr ? 'الشهادات والاعتمادات الميدانية' : 'Active Certifications'}</span>
+                    </span>
+                    <span className="text-[10px] text-emerald-400 font-mono">VERIFIED</span>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    {selectedTech.certifications?.map(cert => (
+                      <div key={cert.skillId} className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-200">
+                            {isAr ? cert.skillNameAr : cert.skillNameEn}
+                          </span>
+                          <span className="text-xs font-mono font-bold text-[#DFBA6B]">
+                            Level {cert.level}/5
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                          <span>{isAr ? 'صالحة حتى:' : 'Expires:'} {cert.expiryDate}</span>
+                          <span className="text-emerald-400">
+                            {cert.isHighAltitudeCertified ? `Scaffold: Up to ${cert.maxWorkHeightMeters}m` : 'Ground Level'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Performance Stats */}
+                <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 grid grid-cols-2 gap-2 text-center text-xs">
+                  <div>
+                    <span className="text-[10px] text-slate-500 block">{isAr ? 'تقييم العملاء' : 'Customer Rating'}</span>
+                    <span className="text-base font-bold font-mono text-amber-400">★ {selectedTech.rating}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 block">{isAr ? 'ثريات مُركبة' : 'Installed'}</span>
+                    <span className="text-base font-bold font-mono text-emerald-400">{selectedTech.completedJobsCount}</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Performance Stats */}
-              <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 grid grid-cols-2 gap-2 text-center text-xs">
-                <div>
-                  <span className="text-[10px] text-slate-500 block">{isAr ? 'تقييم العملاء' : 'Customer Rating'}</span>
-                  <span className="text-base font-bold font-mono text-amber-400">★ {selectedTech.rating}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-500 block">{isAr ? 'ثريات مُركبة' : 'Installed'}</span>
-                  <span className="text-base font-bold font-mono text-emerald-400">{selectedTech.completedJobsCount}</span>
-                </div>
+              <div className="pt-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+                <button
+                  onClick={() => openDetailModal('technician', selectedTech)}
+                  className="text-xs text-[#DFBA6B] hover:underline cursor-pointer flex items-center gap-1 font-semibold"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>{isAr ? 'عرض الشاشة المستقلة للفني' : 'Open Dedicated Screen'}</span>
+                </button>
+                <span className="text-emerald-400 font-mono font-bold">CLEARED FOR HIGH ALTITUDE</span>
               </div>
             </div>
-
-            <div className="pt-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
-              <span>{isAr ? 'الترخيص الطبي والسلامة:' : 'Safety Fitness:'}</span>
-              <span className="text-emerald-400 font-mono font-bold">CLEARED FOR HIGH ALTITUDE</span>
-            </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -272,7 +361,7 @@ export const WorkforceManagement: React.FC = () => {
       {activeSubTab === 'teams' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 flex-1 overflow-y-auto">
           {teams.map(team => (
-            <div key={team.id} className="p-5 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between gap-4">
+            <div key={team.id} className="p-5 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between gap-4 group relative">
               <div>
                 <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                   <div className="flex items-center gap-2">
@@ -284,7 +373,16 @@ export const WorkforceManagement: React.FC = () => {
                       <span className="text-[10px] font-mono text-slate-400">{team.id}</span>
                     </div>
                   </div>
-                  <span className="text-xs font-bold font-mono text-amber-400">★ {team.compositeSkillRating}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold font-mono text-amber-400">★ {team.compositeSkillRating}</span>
+                    <button
+                      onClick={(e) => handleDeleteTeam(team.id, e)}
+                      className="p-1 rounded hover:bg-red-950 text-slate-500 hover:text-red-400 cursor-pointer"
+                      title={isAr ? 'حذف الفريق' : 'Delete Team'}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="my-3 flex flex-col gap-2 text-xs">
@@ -322,6 +420,15 @@ export const WorkforceManagement: React.FC = () => {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Technician / Team Modal */}
+      {modalOpen && (
+        <TechnicianModal
+          mode={modalMode}
+          techToEdit={techToEdit}
+          onClose={() => setModalOpen(false)}
+        />
       )}
     </div>
   );
