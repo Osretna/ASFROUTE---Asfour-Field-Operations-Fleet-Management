@@ -73,9 +73,9 @@ export const WorkOrderModal: React.FC<WorkOrderModalProps> = ({ orderToEdit, onC
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-[#0D131F] border-2 border-slate-700/80 rounded-3xl max-w-2xl w-full p-6 shadow-2xl text-slate-100 flex flex-col gap-4 max-h-[92vh] overflow-hidden">
+      <div className="bg-white dark:bg-[#0D131F] border-2 border-slate-300 dark:border-slate-700/80 rounded-3xl max-w-2xl w-full p-6 shadow-2xl text-slate-800 dark:text-slate-100 flex flex-col gap-4 max-h-[92vh] overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-[#C5A45B]/20 border border-[#C5A45B]/40 flex items-center justify-center text-[#DFBA6B]">
               <FileCheck className="w-5 h-5" />
@@ -164,14 +164,37 @@ export const WorkOrderModal: React.FC<WorkOrderModalProps> = ({ orderToEdit, onC
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className="text-slate-400">{isAr ? 'عنوان الموقع بالتفصيل:' : 'Site Location Address:'}</label>
+              <label className="text-slate-500 dark:text-slate-400">{isAr ? 'عنوان الموقع بالتفصيل:' : 'Site Location Address:'}</label>
               <input
                 type="text"
                 required
                 value={formData.locationNameAr}
                 onChange={(e) => setFormData({ ...formData, locationNameAr: e.target.value, locationNameEn: e.target.value })}
-                className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-100 outline-none focus:border-[#C5A45B]"
+                className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-slate-900 dark:text-slate-100 outline-none focus:border-[#C5A45B]"
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <div className="flex flex-col gap-1">
+                <label className="text-slate-500 dark:text-slate-400 font-mono text-[11px]">{isAr ? 'خط العرض (Latitude):' : 'Latitude:'}</label>
+                <input
+                  type="number"
+                  step="0.0001"
+                  value={formData.coordinates?.[0] || 30.0125}
+                  onChange={(e) => setFormData({ ...formData, coordinates: [parseFloat(e.target.value) || 30.0125, formData.coordinates?.[1] || 31.4820] })}
+                  className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-slate-900 dark:text-slate-100 font-mono text-xs outline-none focus:border-[#C5A45B]"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-slate-500 dark:text-slate-400 font-mono text-[11px]">{isAr ? 'خط الطول (Longitude):' : 'Longitude:'}</label>
+                <input
+                  type="number"
+                  step="0.0001"
+                  value={formData.coordinates?.[1] || 31.4820}
+                  onChange={(e) => setFormData({ ...formData, coordinates: [formData.coordinates?.[0] || 30.0125, parseFloat(e.target.value) || 31.4820] })}
+                  className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-slate-900 dark:text-slate-100 font-mono text-xs outline-none focus:border-[#C5A45B]"
+                />
+              </div>
             </div>
           </div>
 

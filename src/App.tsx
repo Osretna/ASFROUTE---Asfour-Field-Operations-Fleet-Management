@@ -16,16 +16,16 @@ import { AdminLoginModal } from './components/admin/AdminLoginModal';
 import { IndependentDetailModal } from './components/common/IndependentDetailModal';
 
 const MainLayout: React.FC = () => {
-  const { activeTab, certificateModalWo, setCertificateModalWo, language } = useApp();
+  const { activeTab, certificateModalWo, setCertificateModalWo, language, isAdminAuthenticated } = useApp();
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#0A0D14] text-slate-100">
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-100 dark:bg-[#0A0D14] text-slate-800 dark:text-slate-100 transition-colors duration-200">
       <Header />
       
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
         
-        <main className="flex-1 overflow-hidden relative bg-[#0E131E]">
+        <main className="flex-1 h-full overflow-y-auto relative bg-slate-50 dark:bg-[#0E131E] transition-colors duration-200">
           {activeTab === 'dashboard' && <ExecutiveDashboard />}
           {activeTab === 'dispatch' && <DispatchCenter />}
           {activeTab === 'fleet' && <FleetManagement />}
@@ -33,7 +33,8 @@ const MainLayout: React.FC = () => {
           {activeTab === 'workorders' && <WorkOrderLifecycle />}
           {activeTab === 'projects' && <ProjectFloorPlanner />}
           {activeTab === 'mobile_app' && <MobileAppSimulator />}
-          {activeTab === 'architecture' && <ArchitectureViewer />}
+          {/* Architecture tab only accessible when authenticated as admin */}
+          {activeTab === 'architecture' && (isAdminAuthenticated ? <ArchitectureViewer /> : <ExecutiveDashboard />)}
           {activeTab === 'admin' && <AdminControlPanel />}
         </main>
       </div>

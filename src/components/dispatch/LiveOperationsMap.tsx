@@ -1,21 +1,22 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import L from 'leaflet';
 import { useApp } from '../../context/AppContext';
-import { Vehicle, WorkOrder, Branch } from '../../types';
+import { Vehicle, WorkOrder } from '../../types';
 import { BRANCHES } from '../../data/mockData';
 import { 
   Navigation, 
   MapPin, 
   Truck, 
   Layers, 
-  ShieldCheck, 
-  Compass, 
-  Zap, 
   Clock, 
-  Gauge, 
-  Fuel, 
-  AlertCircle,
+  Compass, 
+  Send,
+  MessageSquare,
   X,
-  Maximize2
+  ExternalLink,
+  Target,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
 
 interface LiveOperationsMapProps {
@@ -24,352 +25,423 @@ interface LiveOperationsMapProps {
 }
 
 export const LiveOperationsMap: React.FC<LiveOperationsMapProps> = ({ onSelectWorkOrder, onSelectVehicle }) => {
-  const { language, vehicles, workOrders } = useApp();
+  const { 
+    language, 
+    vehicles, 
+    workOrders, 
+    theme,
+    sendCustomerLocationRequestWhatsApp,
+    issueDeliveryDispatchOrder
+  } = useApp();
+
   const isAr = language === 'ar';
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+  const markersLayerRef = useRef<L.LayerGroup | null>(null);
+  const routeLayerRef = useRef<L.LayerGroup | null>(null);
 
-  const [selectedMapVehicle, setSelectedMapVehicle] = useState<Vehicle | null>(vehicles[0]);
-  const [selectedMapWo, setSelectedMapWo] = useState<WorkOrder | null>(null);
-  const [showTraffic, setShowTraffic] = useState<boolean>(true);
-  const [mapZoom, setMapZoom] = useState<number>(1);
+  const [mapLayerType, setMapLayerType] = useState<'dark' | 'streets' | 'satellite'>('dark');
+  const [selectedMapVehicle, setSelectedMapVehicle] = useState<Vehicle | null>(vehicles[0] || null);
+  const [selectedMapWo, setSelectedMapWo] = useState<WorkOrder | null>(workOrders[0] || null);
+  const [clickedCoords, setClickedCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
-  // Geographic bounds conversion for Greater Cairo & Delta:
-  // Lat range: 29.8 to 31.3 (Height: 1.5 deg)
-  // Lng range: 29.8 to 32.0 (Width: 2.2 deg)
-  const mapCoordsToSvg = (lat: number, lng: number) => {
-    const minLat = 29.85;
-    const maxLat = 31.35;
-    const minLng = 29.80;
-    const maxLng = 31.95;
+  // Initialize real Leaflet Map
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
 
-    const x = ((lng - minLng) / (maxLng - minLng)) * 1000;
-    // Invert Y because latitude goes north (up) but SVG Y goes down
-    const y = 800 - ((lat - minLat) / (maxLat - minLat)) * 800;
+    // Default center on Cairo / New Capital
+    const map = L.map(mapContainerRef.current, {
+      center: [30.0444, 31.3500],
+      zoom: 11,
+      zoomControl: false,
+      attributionControl: false
+    });
 
-    return { x: Math.max(20, Math.min(980, x)), y: Math.max(20, Math.min(780, y)) };
+    // Add zoom control at bottom right
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    markersLayerRef.current = L.layerGroup().addTo(map);
+    routeLayerRef.current = L.layerGroup().addTo(map);
+    mapInstanceRef.current = map;
+
+    // Click on map to capture exact GPS coordinates
+    map.on('click', (e: L.LeafletMouseEvent) => {
+      setClickedCoords({ lat: e.latlng.lat, lng: e.latlng.lng });
+    });
+
+    return () => {
+      map.remove();
+      mapInstanceRef.current = null;
+    };
+  }, []);
+
+  // Update Tile Layer based on selection and theme
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    // Remove existing tile layers
+    map.eachLayer(layer => {
+      if (layer instanceof L.TileLayer) {
+        map.removeLayer(layer);
+      }
+    });
+
+    let tileUrl = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+    let subdomains = 'abcd';
+
+    if (mapLayerType === 'streets') {
+      tileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+      subdomains = 'abc';
+    } else if (mapLayerType === 'satellite') {
+      tileUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+      subdomains = 'abc';
+    } else if (theme === 'light' && mapLayerType === 'dark') {
+      tileUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+    }
+
+    const tileLayer = L.tileLayer(tileUrl, {
+      maxZoom: 19,
+      subdomains,
+    });
+    tileLayer.addTo(map);
+    tileLayer.bringToBack();
+  }, [mapLayerType, theme]);
+
+  // Render Real Markers and Polylines whenever data updates
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const markersLayer = markersLayerRef.current;
+    const routeLayer = routeLayerRef.current;
+    if (!map || !markersLayer || !routeLayer) return;
+
+    markersLayer.clearLayers();
+    routeLayer.clearLayers();
+
+    // 1. Asfour Factory & Depots Markers
+    BRANCHES.forEach(branch => {
+      const depotIcon = L.divIcon({
+        className: 'custom-depot-pin',
+        html: `
+          <div style="background: rgba(197, 164, 91, 0.95); color: #0d131d; padding: 4px 8px; border-radius: 8px; font-weight: bold; font-size: 10px; border: 2px solid #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.4); display: flex; align-items: center; gap: 4px; white-space: nowrap;">
+            <span>🏛️</span>
+            <span>${isAr ? branch.nameAr.split(' ')[0] : branch.city}</span>
+          </div>
+        `,
+        iconSize: [100, 30],
+        iconAnchor: [50, 15]
+      });
+
+      const marker = L.marker([branch.coordinates[0], branch.coordinates[1]], { icon: depotIcon });
+      marker.bindPopup(`
+        <div style="font-family: Cairo, sans-serif; direction: ${isAr ? 'rtl' : 'ltr'}; padding: 4px;">
+          <b style="color: #947125;">${isAr ? branch.nameAr : branch.nameEn}</b>
+          <div style="font-size: 11px; margin-top: 4px;">${branch.city}</div>
+          <div style="font-size: 10px; color: #64748b;">[${branch.coordinates[0].toFixed(4)}, ${branch.coordinates[1].toFixed(4)}]</div>
+        </div>
+      `);
+      markersLayer.addLayer(marker);
+    });
+
+    // 2. Customer Delivery Sites Markers (Diamond Pins)
+    workOrders.forEach(wo => {
+      const isSelected = selectedMapWo?.id === wo.id;
+      const isLocationConfirmed = wo.customerLocationConfirmed;
+      const isDispatched = wo.status === 'en_route';
+
+      const customerIcon = L.divIcon({
+        className: 'custom-customer-pin',
+        html: `
+          <div style="display: flex; flex-direction: column; align-items: center; cursor: pointer; transform: ${isSelected ? 'scale(1.15)' : 'scale(1)'}; transition: transform 0.2s;">
+            <div style="background: ${isDispatched ? '#3B82F6' : isLocationConfirmed ? '#10B981' : '#C5A45B'}; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid #FFFFFF; box-shadow: 0 0 15px ${isLocationConfirmed ? 'rgba(16, 185, 129, 0.7)' : 'rgba(197, 164, 91, 0.6)'};">
+              <span style="font-size: 16px;">💎</span>
+            </div>
+            <div style="background: rgba(13, 19, 31, 0.95); color: #FFFFFF; font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 4px; margin-top: 3px; white-space: nowrap; border: 1px solid rgba(197, 164, 91, 0.4); text-shadow: 0 1px 2px #000;">
+              ${isAr ? wo.customerNameAr.split(' - ')[0] : wo.customerNameEn.split(' - ')[0]}
+            </div>
+          </div>
+        `,
+        iconSize: [80, 50],
+        iconAnchor: [40, 25]
+      });
+
+      const marker = L.marker([wo.coordinates[0], wo.coordinates[1]], { icon: customerIcon });
+      marker.on('click', () => {
+        setSelectedMapWo(wo);
+        onSelectWorkOrder(wo);
+      });
+
+      // Add geofence pulsing circle
+      const circle = L.circle([wo.coordinates[0], wo.coordinates[1]], {
+        radius: isLocationConfirmed ? 350 : 600,
+        color: isLocationConfirmed ? '#10B981' : '#C5A45B',
+        fillColor: isLocationConfirmed ? '#10B981' : '#C5A45B',
+        fillOpacity: 0.12,
+        weight: 1.5,
+        dashArray: isLocationConfirmed ? undefined : '4, 4'
+      });
+      markersLayer.addLayer(circle);
+      markersLayer.addLayer(marker);
+
+      // 3. If delivery order is dispatched, draw polyline from truck to customer
+      if (wo.assignedVehicleId && (wo.status === 'en_route' || wo.dispatchOrderGiven)) {
+        const assignedTruck = vehicles.find(v => v.id === wo.assignedVehicleId);
+        if (assignedTruck) {
+          const latlngs: L.LatLngExpression[] = [
+            [assignedTruck.currentLat, assignedTruck.currentLng],
+            [
+              (assignedTruck.currentLat + wo.coordinates[0]) / 2 + 0.015,
+              (assignedTruck.currentLng + wo.coordinates[1]) / 2 - 0.01
+            ],
+            [wo.coordinates[0], wo.coordinates[1]]
+          ];
+
+          const polyline = L.polyline(latlngs, {
+            color: '#3B82F6',
+            weight: 4,
+            opacity: 0.85,
+            dashArray: '8, 6'
+          });
+          routeLayer.addLayer(polyline);
+        }
+      }
+    });
+
+    // 4. Moving Fleet Vehicles Markers
+    vehicles.forEach(v => {
+      const isSelected = selectedMapVehicle?.id === v.id;
+      const isOnRoute = v.status === 'on_route';
+
+      const vehicleIcon = L.divIcon({
+        className: 'custom-vehicle-pin',
+        html: `
+          <div style="display: flex; flex-direction: column; align-items: center; cursor: pointer; transform: ${isSelected ? 'scale(1.15)' : 'scale(1)'}; transition: transform 0.2s;">
+            <div style="background: ${isSelected ? '#C5A45B' : isOnRoute ? '#2563EB' : '#334155'}; color: #FFFFFF; padding: 4px 8px; border-radius: 8px; border: 2px solid ${isSelected ? '#FFFFFF' : '#60A5FA'}; box-shadow: 0 4px 14px rgba(0,0,0,0.5); display: flex; align-items: center; gap: 4px; font-weight: bold; font-size: 11px; font-family: monospace;">
+              <span>🚚</span>
+              <span>${v.id.replace('TRK-', '')}</span>
+            </div>
+            ${isOnRoute ? `
+              <div style="background: #1D4ED8; color: #93C5FD; font-size: 9px; font-weight: bold; padding: 1px 4px; border-radius: 3px; margin-top: 2px; font-family: monospace;">
+                ${v.speedKmH} km/h
+              </div>
+            ` : ''}
+          </div>
+        `,
+        iconSize: [70, 45],
+        iconAnchor: [35, 22]
+      });
+
+      const marker = L.marker([v.currentLat, v.currentLng], { icon: vehicleIcon });
+      marker.on('click', () => {
+        setSelectedMapVehicle(v);
+        onSelectVehicle(v);
+      });
+      markersLayer.addLayer(marker);
+    });
+  }, [vehicles, workOrders, selectedMapVehicle, selectedMapWo, isAr]);
+
+  // Fly to region helper
+  const handleFlyTo = (lat: number, lng: number, zoom = 13) => {
+    mapInstanceRef.current?.flyTo([lat, lng], zoom, { duration: 1.2 });
+  };
+
+  const handleCopyCoords = (lat: number, lng: number) => {
+    navigator.clipboard?.writeText(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+    setToastMsg(isAr ? 'تم نسخ الإحداثيات بنجاح' : 'Coordinates copied to clipboard');
+    setTimeout(() => setToastMsg(null), 2500);
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#080C14] rounded-xl border border-slate-800/90 overflow-hidden shadow-xl relative">
-      {/* Map Control Bar */}
-      <div className="absolute top-3 inset-x-3 z-30 flex items-center justify-between pointer-events-none">
-        <div className="flex items-center gap-2 pointer-events-auto bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-800 shadow-lg text-xs font-semibold text-slate-200">
-          <Navigation className="w-3.5 h-3.5 text-[#C5A45B]" />
-          <span>{isAr ? 'خريطة العمليات الحية (نطاق القاهرة والدلتا)' : 'Live Fleet Radar (Cairo & Delta)'}</span>
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-1" />
+    <div className="flex flex-col h-full bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800/90 overflow-hidden shadow-2xl relative">
+      {/* Map Control Bar Top */}
+      <div className="absolute top-3 inset-x-3 z-[1000] flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+        {/* Title Badge */}
+        <div className="flex items-center gap-2 pointer-events-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl text-xs font-bold text-slate-800 dark:text-slate-100">
+          <Navigation className="w-4 h-4 text-[#C5A45B]" />
+          <span>{isAr ? 'خريطة العمليات الحية (نظام ملاحة متفاعل)' : 'Interactive Live Fleet & Customer GPS Radar'}</span>
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse ml-1" />
         </div>
 
-        <div className="flex items-center gap-2 pointer-events-auto">
+        {/* Tile Layer Selector & Quick Views */}
+        <div className="flex items-center gap-1.5 pointer-events-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-1 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl text-xs">
           <button
-            onClick={() => setShowTraffic(!showTraffic)}
-            className={`px-2.5 py-1 text-xs rounded-lg border backdrop-blur-md transition-colors ${
-              showTraffic 
-                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' 
-                : 'bg-slate-900/80 text-slate-400 border-slate-800'
+            onClick={() => setMapLayerType('dark')}
+            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+              mapLayerType === 'dark' ? 'bg-[#C5A45B] text-[#0D131D]' : 'text-slate-600 dark:text-slate-400 hover:text-white'
             }`}
           >
-            {isAr ? 'حركة المرور اللحظية' : 'Live Traffic'}
+            {isAr ? 'رادار' : 'Dark'}
+          </button>
+          <button
+            onClick={() => setMapLayerType('streets')}
+            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+              mapLayerType === 'streets' ? 'bg-[#C5A45B] text-[#0D131D]' : 'text-slate-600 dark:text-slate-400 hover:text-white'
+            }`}
+          >
+            {isAr ? 'شوارع' : 'Streets'}
+          </button>
+          <button
+            onClick={() => setMapLayerType('satellite')}
+            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+              mapLayerType === 'satellite' ? 'bg-[#C5A45B] text-[#0D131D]' : 'text-slate-600 dark:text-slate-400 hover:text-white'
+            }`}
+          >
+            {isAr ? 'قمر صناعي' : 'Satellite'}
           </button>
         </div>
       </div>
 
-      {/* Interactive Vector / Canvas Map Engine */}
-      <div className="flex-1 w-full h-full relative overflow-hidden select-none bg-[#090E17]">
-        {/* Radar grid lines */}
-        <div className="absolute inset-0 bg-[radial-gradient(#1E293B_1px,transparent_1px)] [background-size:24px_24px] opacity-40 pointer-events-none" />
-
-        <svg 
-          viewBox="0 0 1000 800" 
-          className="w-full h-full cursor-grab active:cursor-grabbing transition-transform duration-300"
-          style={{ transform: `scale(${mapZoom})` }}
-        >
-          {/* Subtle River Nile Polyline */}
-          <path
-            d="M 520 800 Q 515 650 510 500 Q 520 400 480 320 Q 450 260 410 180 Q 370 120 320 0"
-            fill="none"
-            stroke="#1E3A8A"
-            strokeWidth="8"
-            strokeOpacity="0.4"
-          />
-          <path
-            d="M 480 320 Q 550 240 620 160 Q 680 100 750 0"
-            fill="none"
-            stroke="#1E3A8A"
-            strokeWidth="5"
-            strokeOpacity="0.3"
-          />
-
-          {/* Main Ring Roads & Highways (Arterial Arteries) */}
-          {/* Ring Road (الطريق الدائري) */}
-          <ellipse 
-            cx="540" 
-            cy="460" 
-            rx="160" 
-            ry="140" 
-            fill="none" 
-            stroke={showTraffic ? "#EAB308" : "#334155"} 
-            strokeWidth="3.5" 
-            strokeDasharray={showTraffic ? "8 4" : "none"}
-            strokeOpacity="0.6" 
-          />
-
-          {/* Cairo - Suez Highway (طريق السويس) */}
-          <path
-            d="M 580 440 L 980 360"
-            fill="none"
-            stroke={showTraffic ? "#EF4444" : "#334155"} // Traffic hotspot near New Capital!
-            strokeWidth="4"
-            strokeOpacity="0.7"
-          />
-
-          {/* Mehwar 26th of July towards Sheikh Zayed */}
-          <path
-            d="M 490 450 L 260 440 L 140 430"
-            fill="none"
-            stroke={showTraffic ? "#10B981" : "#334155"}
-            strokeWidth="3.5"
-            strokeOpacity="0.7"
-          />
-
-          {/* Cairo - Alexandria Desert Road */}
-          <path
-            d="M 260 440 L 110 200 L 50 80"
-            fill="none"
-            stroke={showTraffic ? "#10B981" : "#334155"}
-            strokeWidth="3"
-            strokeOpacity="0.6"
-          />
-
-          {/* Regional Ring Road (الدائري الإقليمي) */}
-          <ellipse 
-            cx="550" 
-            cy="450" 
-            rx="340" 
-            ry="300" 
-            fill="none" 
-            stroke="#1E293B" 
-            strokeWidth="2.5" 
-            strokeOpacity="0.5" 
-          />
-
-          {/* Depots & Branches Nodes */}
-          {BRANCHES.map(branch => {
-            const { x, y } = mapCoordsToSvg(branch.coordinates[0], branch.coordinates[1]);
-            return (
-              <g key={branch.id} className="cursor-pointer group">
-                <circle cx={x} cy={y} r="18" fill="#C5A45B" fillOpacity="0.1" stroke="#C5A45B" strokeWidth="1" strokeDasharray="3 3" />
-                <circle cx={x} cy={y} r="6" fill="#C5A45B" />
-                <text 
-                  x={x} 
-                  y={y - 12} 
-                  fill="#E2E8F0" 
-                  fontSize="10" 
-                  fontWeight="bold" 
-                  textAnchor="middle" 
-                  className="pointer-events-none drop-shadow-md font-sans"
-                >
-                  {isAr ? branch.nameAr.split(' ')[0] : branch.city}
-                </text>
-              </g>
-            );
-          })}
-
-          {/* Active Work Order Delivery Sites with Geofence Rings */}
-          {workOrders.map((wo) => {
-            const { x, y } = mapCoordsToSvg(wo.coordinates[0], wo.coordinates[1]);
-            const isSelected = selectedMapWo?.id === wo.id;
-
-            return (
-              <g 
-                key={wo.id} 
-                onClick={() => {
-                  setSelectedMapWo(wo);
-                  onSelectWorkOrder(wo);
-                }} 
-                className="cursor-pointer group"
-              >
-                {/* Geofence pulse */}
-                <circle 
-                  cx={x} 
-                  cy={y} 
-                  r="24" 
-                  fill="#DFBA6B" 
-                  fillOpacity="0.08" 
-                  stroke="#DFBA6B" 
-                  strokeWidth="1.5" 
-                  strokeDasharray="4 2"
-                  className="animate-pulse"
-                />
-
-                <circle 
-                  cx={x} 
-                  cy={y} 
-                  r="9" 
-                  fill={isSelected ? "#DFBA6B" : "#1E293B"} 
-                  stroke="#DFBA6B" 
-                  strokeWidth="2" 
-                />
-
-                <text 
-                  x={x} 
-                  y={y + 3.5} 
-                  fill="#FFFFFF" 
-                  fontSize="8" 
-                  fontWeight="bold" 
-                  textAnchor="middle"
-                  className="pointer-events-none font-mono"
-                >
-                  💎
-                </text>
-
-                <text 
-                  x={x} 
-                  y={y + 22} 
-                  fill="#CBD5E1" 
-                  fontSize="9" 
-                  fontWeight="600" 
-                  textAnchor="middle" 
-                  className="pointer-events-none drop-shadow"
-                >
-                  {isAr ? wo.customerNameAr.split(' - ')[0] : wo.customerNameEn.split(' - ')[0]}
-                </text>
-              </g>
-            );
-          })}
-
-          {/* Moving Fleet Vehicles with Live Headings */}
-          {vehicles.map((v) => {
-            const { x, y } = mapCoordsToSvg(v.currentLat, v.currentLng);
-            const isSelected = selectedMapVehicle?.id === v.id;
-            const isOnRoute = v.status === 'on_route';
-
-            return (
-              <g 
-                key={v.id} 
-                onClick={() => {
-                  setSelectedMapVehicle(v);
-                  onSelectVehicle(v);
-                }}
-                className="cursor-pointer group"
-              >
-                {/* Ping wave around active vehicle */}
-                {isOnRoute && (
-                  <circle cx={x} cy={y} r="18" fill="#3B82F6" fillOpacity="0.15" stroke="#3B82F6" strokeWidth="1" className="animate-ping" />
-                )}
-
-                <rect 
-                  x={x - 14} 
-                  y={y - 12} 
-                  width="28" 
-                  height="24" 
-                  rx="6" 
-                  fill={isSelected ? "#C5A45B" : isOnRoute ? "#1D4ED8" : "#334155"} 
-                  stroke={isSelected ? "#FFFFFF" : "#60A5FA"} 
-                  strokeWidth="1.5" 
-                  className="shadow-lg"
-                />
-
-                <text 
-                  x={x} 
-                  y={y + 3} 
-                  fill={isSelected ? "#0F172A" : "#FFFFFF"} 
-                  fontSize="9" 
-                  fontWeight="bold" 
-                  textAnchor="middle" 
-                  className="font-mono pointer-events-none"
-                >
-                  {v.id.replace('TRK-', '')}
-                </text>
-
-                {/* Speed tag */}
-                {isOnRoute && (
-                  <text 
-                    x={x} 
-                    y={y - 16} 
-                    fill="#93C5FD" 
-                    fontSize="8" 
-                    fontWeight="bold" 
-                    textAnchor="middle" 
-                    className="font-mono"
-                  >
-                    {v.speedKmH} km/h
-                  </text>
-                )}
-              </g>
-            );
-          })}
-        </svg>
-
-        {/* Selected Vehicle Telemetry Floating Card */}
-        {selectedMapVehicle && (
-          <div className="absolute bottom-3 left-3 right-3 lg:right-auto lg:w-96 z-30 bg-slate-900/95 backdrop-blur-md p-4 rounded-xl border border-slate-700/80 shadow-2xl text-slate-100 flex flex-col gap-3">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
-                  <Truck className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-white font-mono">{selectedMapVehicle.id}</span>
-                    <span className="text-[10px] font-mono bg-slate-800 px-1.5 py-0.5 rounded text-slate-300">
-                      {selectedMapVehicle.plateNumber}
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-slate-400 truncate w-56">
-                    {selectedMapVehicle.model}
-                  </div>
-                </div>
-              </div>
-
-              <button 
-                onClick={() => setSelectedMapVehicle(null)}
-                className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Live Metrics Grid */}
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="p-2 rounded bg-slate-950/70 border border-slate-800">
-                <span className="text-[9px] text-slate-400 block">{isAr ? 'السرعة الحالية' : 'Speed'}</span>
-                <span className="text-xs font-bold font-mono text-emerald-400 tabular-nums">
-                  {selectedMapVehicle.speedKmH} km/h
-                </span>
-              </div>
-              <div className="p-2 rounded bg-slate-950/70 border border-slate-800">
-                <span className="text-[9px] text-slate-400 block">{isAr ? 'مستوى الوقود' : 'Fuel'}</span>
-                <span className="text-xs font-bold font-mono text-amber-400 tabular-nums">
-                  {selectedMapVehicle.fuelLevelPercent}%
-                </span>
-              </div>
-              <div className="p-2 rounded bg-slate-950/70 border border-slate-800">
-                <span className="text-[9px] text-slate-400 block">{isAr ? 'عزل الاهتزاز' : 'Pneumatic'}</span>
-                <span className="text-xs font-bold font-mono text-blue-400">
-                  {selectedMapVehicle.hasPneumaticDamping ? 'ACTIVE' : 'N/A'}
-                </span>
-              </div>
-            </div>
-
-            {/* Current Driver & Route Details */}
-            <div className="flex items-center justify-between text-[11px] bg-slate-950/50 p-2 rounded border border-slate-800">
-              <span className="text-slate-400">{isAr ? 'السائق المعين:' : 'Assigned Driver:'}</span>
-              <span className="font-semibold text-slate-200">
-                {isAr ? selectedMapVehicle.driverNameAr : selectedMapVehicle.driverNameEn}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between text-[11px] bg-[#C5A45B]/10 p-2 rounded border border-[#C5A45B]/30 text-[#DFBA6B]">
-              <span className="flex items-center gap-1 font-semibold">
-                <Clock className="w-3.5 h-3.5" />
-                {isAr ? 'موعد الوصول المتوقع (ETA):' : 'Next Stop ETA:'}
-              </span>
-              <span className="font-mono font-bold">
-                {selectedMapVehicle.nextStopEta || 'Available in Depot'}
-              </span>
-            </div>
-          </div>
-        )}
+      {/* Region Quick Zoom Strip (Left Side) */}
+      <div className="absolute top-16 right-3 z-[1000] flex flex-col gap-1.5 pointer-events-auto">
+        {[
+          { labelAr: 'القاهرة الجديدة', labelEn: 'New Cairo', lat: 30.0131, lng: 31.4989 },
+          { labelAr: 'العاصمة الإدارية', labelEn: 'New Capital', lat: 30.0125, lng: 31.7500 },
+          { labelAr: 'الشيخ زايد', labelEn: 'Sheikh Zayed', lat: 30.0543, lng: 30.9856 },
+          { labelAr: 'العاشر من رمضان', labelEn: '10th of Ramadan', lat: 30.3012, lng: 31.7485 },
+          { labelAr: 'الإسكندرية', labelEn: 'Alexandria', lat: 31.2001, lng: 29.9187 }
+        ].map(r => (
+          <button
+            key={r.labelEn}
+            onClick={() => handleFlyTo(r.lat, r.lng, 12)}
+            className="px-2.5 py-1 rounded-lg bg-white/90 dark:bg-slate-900/90 hover:bg-[#C5A45B] hover:text-[#0D131D] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 text-[10px] font-bold shadow-md transition-all cursor-pointer text-end"
+          >
+            {isAr ? r.labelAr : r.labelEn}
+          </button>
+        ))}
       </div>
+
+      {/* Real Leaflet Map Container */}
+      <div ref={mapContainerRef} className="flex-1 w-full h-full z-0" />
+
+      {/* Toast Notification */}
+      {toastMsg && (
+        <div className="absolute top-20 inset-x-0 mx-auto w-max z-[1001] bg-emerald-600 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-2xl animate-in fade-in">
+          {toastMsg}
+        </div>
+      )}
+
+      {/* Clicked Map Coordinates Display Tooltip */}
+      {clickedCoords && (
+        <div className="absolute top-16 left-3 z-[1000] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xl text-xs flex flex-col gap-1.5 max-w-xs">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-[#8E6A23] dark:text-[#DFBA6B] flex items-center gap-1">
+              <Target className="w-3.5 h-3.5" />
+              <span>{isAr ? 'الإحداثيات الحقيقية المحددة:' : 'Inspected GPS Pin:'}</span>
+            </span>
+            <button onClick={() => setClickedCoords(null)} className="text-slate-400 hover:text-white">✕</button>
+          </div>
+
+          <div className="font-mono text-xs text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-950 p-1.5 rounded border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <span>{clickedCoords.lat.toFixed(5)}, {clickedCoords.lng.toFixed(5)}</span>
+            <button 
+              onClick={() => handleCopyCoords(clickedCoords.lat, clickedCoords.lng)}
+              className="text-[10px] text-[#C5A45B] hover:underline"
+            >
+              {isAr ? 'نسخ' : 'Copy'}
+            </button>
+          </div>
+
+          <a
+            href={`https://www.google.com/maps?q=${clickedCoords.lat},${clickedCoords.lng}`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[10px] text-blue-500 hover:underline flex items-center gap-1"
+          >
+            <ExternalLink className="w-3 h-3" />
+            <span>{isAr ? 'فتح على خرائط Google' : 'Open in Google Maps'}</span>
+          </a>
+        </div>
+      )}
+
+      {/* Floating Customer Location & Vehicle Dispatch Panel (Bottom) */}
+      {selectedMapWo && (
+        <div className="absolute bottom-3 left-3 right-3 lg:right-auto lg:w-96 z-[1000] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-4 rounded-2xl border border-slate-200 dark:border-slate-700/80 shadow-2xl text-slate-800 dark:text-slate-100 flex flex-col gap-3">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-[#C5A45B]/20 border border-[#C5A45B]/40 flex items-center justify-center text-[#8E6A23] dark:text-[#DFBA6B] shrink-0">
+                💎
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">{isAr ? selectedMapWo.customerNameAr : selectedMapWo.customerNameEn}</span>
+                  <span className="text-[10px] font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-600 dark:text-slate-300">
+                    {selectedMapWo.orderNumber}
+                  </span>
+                </div>
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate w-60">
+                  {isAr ? selectedMapWo.locationNameAr : selectedMapWo.locationNameEn}
+                </div>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => setSelectedMapWo(null)}
+              className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Coordinates & WhatsApp Status */}
+          <div className="flex items-center justify-between text-xs bg-slate-50 dark:bg-slate-950 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center gap-1.5 font-mono text-[11px] text-slate-600 dark:text-slate-300">
+              <MapPin className="w-3.5 h-3.5 text-[#C5A45B]" />
+              <span>{selectedMapWo.coordinates[0].toFixed(4)}, {selectedMapWo.coordinates[1].toFixed(4)}</span>
+            </div>
+
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+              selectedMapWo.customerLocationConfirmed
+                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+            }`}>
+              {selectedMapWo.customerLocationConfirmed ? (isAr ? '📍 لوكيشن مؤكد' : '📍 Verified GPS') : (isAr ? '⏳ بانتظار اللوكيشن' : '⏳ Awaiting Pin')}
+            </span>
+          </div>
+
+          {/* Actions: WhatsApp Location Request & Vehicle Dispatch */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                const res = sendCustomerLocationRequestWhatsApp(selectedMapWo.id);
+                if (res.url) window.open(res.url, '_blank');
+              }}
+              className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 cursor-pointer transition-colors"
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span>{isAr ? 'طلب اللوكيشن (واتساب)' : 'Send WhatsApp Req'}</span>
+            </button>
+
+            <button
+              onClick={() => {
+                const res = issueDeliveryDispatchOrder(selectedMapWo.id);
+                setToastMsg(res.message);
+                setTimeout(() => setToastMsg(null), 3000);
+              }}
+              disabled={selectedMapWo.status === 'en_route'}
+              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-md cursor-pointer transition-colors ${
+                selectedMapWo.status === 'en_route'
+                  ? 'bg-blue-600/30 text-blue-400 border border-blue-500/40 cursor-default'
+                  : 'bg-[#C5A45B] hover:bg-[#D4B36A] text-[#0D131D] shadow-[#C5A45B]/20'
+              }`}
+            >
+              <Navigation className="w-3.5 h-3.5" />
+              <span>{selectedMapWo.status === 'en_route' ? (isAr ? 'الشاحنة بالطريق' : 'En Route') : (isAr ? 'أمر التوصيل للشاحنة' : 'Issue Dispatch Order')}</span>
+            </button>
+          </div>
+
+          {/* Open in Google Maps Navigation */}
+          <a
+            href={`https://www.google.com/maps/dir/?api=1&destination=${selectedMapWo.coordinates[0]},${selectedMapWo.coordinates[1]}`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[11px] text-center text-blue-500 dark:text-blue-400 hover:underline flex items-center justify-center gap-1 pt-1"
+          >
+            <ExternalLink className="w-3 h-3" />
+            <span>{isAr ? 'فتح المسار والملاحة في Google Maps للسيارة' : 'Open Navigation Route in Google Maps'}</span>
+          </a>
+        </div>
+      )}
     </div>
   );
 };

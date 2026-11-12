@@ -164,6 +164,14 @@ export interface WorkOrder {
   notesAr: string;
   notesEn: string;
   certificateNumber?: string;
+  // WhatsApp Customer Location Tracking & Direct Vehicle Order
+  whatsappStatus?: 'not_contacted' | 'location_requested' | 'location_received' | 'dispatch_confirmed';
+  whatsappLastSentAt?: string;
+  whatsappAccountId?: string;
+  customerLocationConfirmed?: boolean;
+  receivedLocationNote?: string;
+  dispatchOrderGiven?: boolean;
+  dispatchOrderGivenAt?: string;
 }
 
 export interface GanttTaskBlock {
@@ -277,4 +285,32 @@ export interface SystemSecurityConfig {
   enableOfflineMobileSync: boolean;
   requireDigitalSignature: boolean;
   requireBeforeAfterPhotos: boolean;
+}
+
+// ---------------- WhatsApp Customer Coordination Definitions ----------------
+
+export interface WhatsAppAccount {
+  id: string;
+  nameAr: string;
+  nameEn: string;
+  phone: string; // e.g. "201008924110"
+  departmentAr: string;
+  departmentEn: string;
+  isActive: boolean;
+  messagesSentCount: number;
+  addedAt: string;
+}
+
+export interface WhatsAppMessageLog {
+  id: string;
+  workOrderId: string;
+  whatsappAccountId: string;
+  senderPhone: string;
+  customerPhone: string;
+  customerName: string;
+  messageType: 'location_request' | 'location_received' | 'dispatch_notice';
+  messageText: string;
+  timestamp: string;
+  status: 'sent' | 'delivered' | 'received';
+  locationCoordinates?: [number, number];
 }

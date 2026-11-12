@@ -15,7 +15,8 @@ import {
   FirebaseCloudConfig,
   CloudStorageConfig,
   GoogleMapsConfig,
-  SystemSecurityConfig
+  SystemSecurityConfig,
+  WhatsAppAccount
 } from '../types';
 import { 
   BRANCHES, 
@@ -25,7 +26,8 @@ import {
   INITIAL_WORK_ORDERS, 
   INITIAL_GANTT_BLOCKS, 
   INITIAL_EVENT_LOGS, 
-  INITIAL_PROJECT_BUILDINGS 
+  INITIAL_PROJECT_BUILDINGS,
+  INITIAL_WHATSAPP_ACCOUNTS
 } from '../data/mockData';
 
 export type ActiveTab = 
@@ -137,13 +139,29 @@ interface AppContextType {
   testFirebaseConnection: () => Promise<{ success: boolean; message: string; latencyMs: number }>;
   testStorageConnection: () => Promise<{ success: boolean; message: string }>;
   testMapsConnection: () => Promise<{ success: boolean; message: string }>;
+
+  // WhatsApp Customer Dispatch & Real-Time Coordination
+  whatsappAccounts: WhatsAppAccount[];
+  addWhatsAppAccount: (acc: WhatsAppAccount) => void;
+  updateWhatsAppAccount: (acc: WhatsAppAccount) => void;
+  deleteWhatsAppAccount: (id: string) => void;
+  sendCustomerLocationRequestWhatsApp: (workOrderId: string, accountId?: string) => { url: string; message: string };
+  receiveCustomerLocationFromWhatsApp: (workOrderId: string, lat: number, lng: number, addressDesc?: string) => void;
+  issueDeliveryDispatchOrder: (workOrderId: string, vehicleId?: string) => { success: boolean; message: string };
+
+  // Real-Time Notifications & Incident Alert Management
+  unreadAlertCount: number;
+  markAllLogsRead: () => void;
+  triggerSimulatedIncident: (type?: 'speed' | 'vibration' | 'anchor' | 'delay') => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [language, setLanguage] = useState<Language>('ar');
-  const [theme, setTheme] = useState<ThemeMode>('dark');
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    return (localStorage.getItem('asfroute_theme') as ThemeMode) || 'dark';
+  });
   const [activeBranchId, setActiveBranchId] = useState<BranchId | 'all'>('all');
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
 
@@ -190,6 +208,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return INITIAL_PROJECT_BUILDINGS;
   });
 
+  const [whatsappAccounts, setWhatsappAccounts] = useState<WhatsAppAccount[]>(() => {
+    const saved = localStorage.getItem('asfroute_whatsapp_accounts');
+    if (saved) {
+      try { return JSON.parse(saved); } catch {}
+    }
+    return INITIAL_WHATSAPP_ACCOUNTS;
+  });
+
+  const [lastReadTimestamp, setLastReadTimestamp] = useState<number>(() => {
+    return parseInt(localStorage.getItem('asfroute_last_read_alerts') || '0', 10);
+  });
+
   const [selectedWorkOrder, setSelectedWorkOrder] = useState<WorkOrder | null>(INITIAL_WORK_ORDERS[0]);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(INITIAL_VEHICLES[0]);
   const [selectedTechnician, setSelectedTechnician] = useState<Technician | null>(INITIAL_TECHNICIANS[0]);
@@ -227,6 +257,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem('asfroute_projects', JSON.stringify(projectBuildings));
   }, [projectBuildings]);
+
+  useEffect(() => {
+    localStorage.setItem('asfroute_whatsapp_accounts', JSON.stringify(whatsappAccounts));
+  }, [whatsappAccounts]);
 
   // Admin Auth State
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
@@ -352,15 +386,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('asfroute_security_config', JSON.stringify(cfg));
   };
 
-  // Sync RTL/LTR & dark class on <html>
+  // Sync RTL/LTR & dark/light class on <html> and <body>
   useEffect(() => {
     const html = document.documentElement;
     html.lang = language;
     html.dir = language === 'ar' ? 'rtl' : 'ltr';
+    localStorage.setItem('asfroute_theme', theme);
     if (theme === 'dark') {
       html.classList.add('dark');
+      html.classList.remove('light');
+      document.body.classList.add('dark');
+      document.body.classList.remove('light');
     } else {
       html.classList.remove('dark');
+      html.classList.add('light');
+      document.body.classList.remove('dark');
+      document.body.classList.add('light');
     }
   }, [language, theme]);
 
@@ -928,6 +969,213 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  // ---------------- WhatsApp Customer Coordination ----------------
+  const addWhatsAppAccount = (acc: WhatsAppAccount) => {
+    setWhatsappAccounts(prev => [acc, ...prev]);
+    addLiveLog(
+      `إضافة رقم واتساب تشغيلي جديد: ${acc.phone}`,
+      `New WhatsApp Dispatch Number: ${acc.phone}`,
+      `تم تفعيل الرقم لصالح [${acc.nameAr}] لاستقبال وإرسال إحداثيات ومواقع العملاء`,
+      `Activated WhatsApp coordination desk [${acc.nameEn}]`,
+      'success',
+      'safety',
+      acc.id
+    );
+  };
+
+  const updateWhatsAppAccount = (acc: WhatsAppAccount) => {
+    setWhatsappAccounts(prev => prev.map(a => a.id === acc.id ? acc : a));
+  };
+
+  const deleteWhatsAppAccount = (id: string) => {
+    setWhatsappAccounts(prev => prev.filter(a => a.id !== id));
+  };
+
+  const sendCustomerLocationRequestWhatsApp = (workOrderId: string, accountId?: string) => {
+    const wo = workOrders.find(w => w.id === workOrderId);
+    if (!wo) return { url: '', message: '' };
+
+    const activeAcc = whatsappAccounts.find(a => accountId ? a.id === accountId : a.isActive) || whatsappAccounts[0];
+    const customerPhoneClean = wo.customerPhone.replace(/[^0-9]/g, '');
+
+    const message = language === 'ar'
+      ? `مرحباً بك عميلنا العزيز (${wo.customerNameAr}) من شركة عصفور كريستال 💎.\nنحن فريق المتابعة والتوصيل، جاري تجهيز شحنتكم رقم (${wo.orderNumber}) لتركيب (${wo.chandelier.modelNameAr}).\n\nيرجى التكرم بإرسال الموقع الجغرافي الدقيق للعنوان (Live Location أو رابط خرائط Google) عبر هذه المحادثة حتى تتوجه سيارة التوصيل وفريق التركيب إليكم مباشرة وبدون أي تأخير.`
+      : `Hello valued client (${wo.customerNameEn}) from Asfour Crystal 💎.\nWe are preparing your installation order (${wo.orderNumber}) for (${wo.chandelier.modelNameEn}).\n\nPlease share your exact location pin or Google Maps link via WhatsApp so our delivery vehicle and rigging team arrive directly at your address.`;
+
+    const encodedText = encodeURIComponent(message);
+    const waUrl = `https://wa.me/${customerPhoneClean}?text=${encodedText}`;
+
+    const nowTime = new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+    setWorkOrders(prev => prev.map(w => {
+      if (w.id === workOrderId) {
+        return {
+          ...w,
+          whatsappStatus: 'location_requested',
+          whatsappLastSentAt: nowTime,
+          whatsappAccountId: activeAcc?.id
+        };
+      }
+      return w;
+    }));
+
+    if (activeAcc) {
+      setWhatsappAccounts(prev => prev.map(a => a.id === activeAcc.id ? { ...a, messagesSentCount: a.messagesSentCount + 1 } : a));
+    }
+
+    addLiveLog(
+      `إرسال طلب لوكيشن عبر واتساب: ${wo.customerNameAr}`,
+      `WhatsApp Location Request Sent: ${wo.customerNameEn}`,
+      `تم إرسال رسالة واتساب للعميل عبر خط [${activeAcc?.nameAr || 'الخدمة'}] لطلب إحداثيات الموقع الدقيق للشحنة`,
+      `Dispatched location request via WhatsApp to ${wo.customerPhone}`,
+      'info',
+      'work_order',
+      wo.id
+    );
+
+    return { url: waUrl, message };
+  };
+
+  const receiveCustomerLocationFromWhatsApp = (workOrderId: string, lat: number, lng: number, addressDesc?: string) => {
+    const wo = workOrders.find(w => w.id === workOrderId);
+    if (!wo) return;
+
+    setWorkOrders(prev => prev.map(w => {
+      if (w.id === workOrderId) {
+        return {
+          ...w,
+          coordinates: [lat, lng],
+          customerLocationConfirmed: true,
+          whatsappStatus: 'location_received',
+          receivedLocationNote: addressDesc || (language === 'ar' ? 'تم استلام وتأكيد الإحداثيات الدقيقة من محادثة الواتساب' : 'Coordinates verified via customer WhatsApp live location')
+        };
+      }
+      return w;
+    }));
+
+    addLiveLog(
+      `استلام وتأكيد لوكيشن العميل بالواتساب: ${wo.customerNameAr}`,
+      `Customer Location Received via WhatsApp: ${wo.customerNameEn}`,
+      `تم تثبيت الإحداثيات الدقيقة [${lat.toFixed(4)}, ${lng.toFixed(4)}] والخريطة جاهزة لتوجيه الشاحنة فوراً`,
+      `Updated GPS coordinates for ${wo.orderNumber} via WhatsApp live pin`,
+      'success',
+      'work_order',
+      wo.id
+    );
+  };
+
+  const issueDeliveryDispatchOrder = (workOrderId: string, vehicleId?: string): { success: boolean; message: string } => {
+    const wo = workOrders.find(w => w.id === workOrderId);
+    if (!wo) return { success: false, message: 'Work order not found' };
+
+    const targetVehicleId = vehicleId || wo.assignedVehicleId || vehicles[0]?.id;
+    const targetVehicle = vehicles.find(v => v.id === targetVehicleId);
+
+    if (!targetVehicle) {
+      return { success: false, message: language === 'ar' ? 'يرجى تحديد شاحنة للنقل أولاً' : 'Please select a delivery vehicle' };
+    }
+
+    const nowTime = new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+
+    setVehicles(prev => prev.map(v => {
+      if (v.id === targetVehicleId) {
+        return {
+          ...v,
+          status: 'on_route',
+          currentWorkOrderId: workOrderId,
+          nextStopEta: '25 min'
+        };
+      }
+      return v;
+    }));
+
+    setWorkOrders(prev => prev.map(w => {
+      if (w.id === workOrderId) {
+        return {
+          ...w,
+          status: 'en_route',
+          assignedVehicleId: targetVehicleId,
+          dispatchOrderGiven: true,
+          dispatchOrderGivenAt: nowTime,
+          whatsappStatus: 'dispatch_confirmed'
+        };
+      }
+      return w;
+    }));
+
+    addLiveLog(
+      `🚨 صدور أمر تحرك الشاحنة إلى موقع العميل: ${targetVehicle.plateNumber}`,
+      `🚨 Vehicle Dispatch Order Issued: ${targetVehicle.plateNumberEn}`,
+      `توجهت الشاحنة ${targetVehicle.id} مباشرة إلى إحداثيات العميل [${wo.coordinates[0].toFixed(4)}, ${wo.coordinates[1].toFixed(4)}] لنقل ثريا ${wo.chandelier.modelNameAr}`,
+      `Truck ${targetVehicle.id} dispatched directly to customer coordinates`,
+      'alert',
+      'vehicle',
+      targetVehicle.id
+    );
+
+    return {
+      success: true,
+      message: language === 'ar' 
+        ? `تم إعطاء أمر التوصيل بنجاح للشاحنة ${targetVehicle.plateNumber}! تم تحديد المسار المباشر على الخريطة وتوجيه السائق.` 
+        : `Delivery order issued! Truck ${targetVehicle.plateNumberEn} is en route to customer coordinates.`
+    };
+  };
+
+  // ---------------- Notifications & Simulated Problem Generator ----------------
+  const unreadAlertCount = eventLogs.filter(l => l.severity === 'alert' || l.severity === 'warning').length;
+
+  const markAllLogsRead = () => {
+    setLastReadTimestamp(Date.now());
+    localStorage.setItem('asfroute_last_read_alerts', Date.now().toString());
+  };
+
+  const triggerSimulatedIncident = (type: 'speed' | 'vibration' | 'anchor' | 'delay' = 'speed') => {
+    if (type === 'speed') {
+      const v = vehicles[0] || INITIAL_VEHICLES[0];
+      addLiveLog(
+        `⚠️ إنذار تجاوز السرعة القصوى: ${v.plateNumber} (84 كم/س)`,
+        `⚠️ Speed Limit Violation: ${v.plateNumberEn} (84 km/h)`,
+        `تجاوزت الشاحنة السرعة المحددة (70 كم/س) على طريق السويس. تم إرسال تنبيه للسائق لحماية بلورات الكريستال فوراً.`,
+        `Truck exceeded 70km/h cap. Sent vibration safety warning to driver.`,
+        'alert',
+        'safety',
+        v.id
+      );
+    } else if (type === 'vibration') {
+      const v = vehicles[1] || INITIAL_VEHICLES[1];
+      addLiveLog(
+        `⚠️ اهتزاز زائد بمستشعر الشاحنة: ${v.plateNumber}`,
+        `⚠️ High Vibration Sensor Alert: ${v.plateNumberEn}`,
+        `رصد مستشعر الصدمات الهوائية مطب غير متوقع. يرجى تدقيق ثبات أقفاص التعبئة الملكية للثريا.`,
+        `Vibration sensor threshold exceeded on air suspension.`,
+        'warning',
+        'safety',
+        v.id
+      );
+    } else if (type === 'anchor') {
+      const wo = workOrders[0] || INITIAL_WORK_ORDERS[0];
+      addLiveLog(
+        `⚠️ فحص مرساة السقف بحاجة لإعادة تدقيق: ${wo.orderNumber}`,
+        `⚠️ Ceiling Anchor Pull-Test Alert: ${wo.orderNumber}`,
+        `معامل الأمان لمرساة سقف العميل ${wo.customerNameAr} يحتاج تدقيق مهندس الموقع قبل بدء رفع الثريا.`,
+        `Anchor safety factor needs re-inspection prior to hoisting.`,
+        'alert',
+        'work_order',
+        wo.id
+      );
+    } else {
+      const wo = workOrders[1] || INITIAL_WORK_ORDERS[1];
+      addLiveLog(
+        `⚠️ تأخير في مسار التوصيل: ${wo.orderNumber}`,
+        `⚠️ Route Congestion Delay Alert: ${wo.orderNumber}`,
+        `اختناق مروري عند مدخل العاصمة الإدارية يؤخر وصول الشاحنة 20 دقيقة عن نافذة الموعد.`,
+        `Traffic jam delaying arrival window by 20 minutes.`,
+        'warning',
+        'work_order',
+        wo.id
+      );
+    }
+  };
+
   const filteredVehicles = activeBranchId === 'all' 
     ? vehicles 
     : vehicles.filter(v => v.branchId === activeBranchId);
@@ -1020,6 +1268,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       testFirebaseConnection,
       testStorageConnection,
       testMapsConnection,
+
+      // WhatsApp Customer Coordination
+      whatsappAccounts,
+      addWhatsAppAccount,
+      updateWhatsAppAccount,
+      deleteWhatsAppAccount,
+      sendCustomerLocationRequestWhatsApp,
+      receiveCustomerLocationFromWhatsApp,
+      issueDeliveryDispatchOrder,
+
+      // Notifications & Incidents
+      unreadAlertCount,
+      markAllLogsRead,
+      triggerSimulatedIncident,
     }}>
       {children}
     </AppContext.Provider>

@@ -6,7 +6,8 @@ import {
   WorkOrder, 
   GanttTaskBlock, 
   LiveEventLog, 
-  ProjectBuilding 
+  ProjectBuilding,
+  WhatsAppAccount
 } from '../types';
 
 export const BRANCHES: Branch[] = [
@@ -830,3 +831,40 @@ export const INITIAL_PROJECT_BUILDINGS: ProjectBuilding[] = [
     ]
   }
 ];
+
+export const INITIAL_WHATSAPP_ACCOUNTS: WhatsAppAccount[] = [
+  {
+    id: 'WA-01',
+    nameAr: 'فريق متابعة العملاء وتحديد المواقع (الخط الساخن)',
+    nameEn: 'Customer Location Dispatch Hotline #1',
+    phone: '201008924110',
+    departmentAr: 'قسم المتابعة الميدانية وخدمة العملاء',
+    departmentEn: 'Field Coordination & Client Service',
+    isActive: true,
+    messagesSentCount: 42,
+    addedAt: '2026-11-10 08:30'
+  },
+  {
+    id: 'WA-02',
+    nameAr: 'غرفة عمليات التوصيل وأوامر الشاحنات',
+    nameEn: 'Operations & Truck Dispatch Desk',
+    phone: '201114567890',
+    departmentAr: 'إدارة أسطول النقل والشحنات الملكية',
+    departmentEn: 'Royal Transport Fleet Control',
+    isActive: true,
+    messagesSentCount: 28,
+    addedAt: '2026-11-11 10:15'
+  },
+  {
+    id: 'WA-03',
+    nameAr: 'خدمة كبار العملاء والفيلات (VIP Service)',
+    nameEn: 'VIP & Palatial Estates Support',
+    phone: '201223344556',
+    departmentAr: 'وحدة دعم العقود الحصرية وقصور الشيخ زايد',
+    departmentEn: 'VIP Royal Estates Support',
+    isActive: true,
+    messagesSentCount: 19,
+    addedAt: '2026-11-12 09:00'
+  }
+];
+

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FCE198" />
+      <stop offset="50%" stop-color="#C5A45B" />
+      <stop offset="100%" stop-color="#8E6A23" />
+    </linearGradient>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#182234" />
+      <stop offset="100%" stop-color="#090E17" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#bgGrad)" stroke="#C5A45B" stroke-width="2" />
+  <!-- Asfour Crystal Diamond Silhouette -->
+  <polygon points="32,8 52,24 44,54 20,54 12,24" fill="none" stroke="url(#goldGrad)" stroke-width="3" stroke-linejoin="round" />
+  <polyline points="12,24 52,24" fill="none" stroke="url(#goldGrad)" stroke-width="2" />
+  <polyline points="20,54 32,24 44,54" fill="none" stroke="url(#goldGrad)" stroke-width="2" />
+  <polyline points="32,8 32,24" fill="none" stroke="url(#goldGrad)" stroke-width="2" />
+  <polyline points="32,8 24,24" fill="none" stroke="url(#goldGrad)" stroke-width="1.5" />
+  <polyline points="32,8 40,24" fill="none" stroke="url(#goldGrad)" stroke-width="1.5" />
+  <circle cx="32" cy="24" r="3" fill="#FFF8DE" />
+</svg>

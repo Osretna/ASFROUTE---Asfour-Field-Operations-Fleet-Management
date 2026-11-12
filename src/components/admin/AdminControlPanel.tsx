@@ -22,8 +22,14 @@ import {
   Users,
   HardDrive,
   Eye,
-  EyeOff
+  EyeOff,
+  MessageSquare,
+  Phone,
+  Plus,
+  Trash2,
+  Send
 } from 'lucide-react';
+import { WhatsAppAccount } from '../../types';
 
 export const AdminControlPanel: React.FC = () => {
   const { 
@@ -45,12 +51,23 @@ export const AdminControlPanel: React.FC = () => {
     testMapsConnection,
     vehicles,
     technicians,
-    workOrders
+    workOrders,
+    whatsappAccounts,
+    addWhatsAppAccount,
+    updateWhatsAppAccount,
+    deleteWhatsAppAccount
   } = useApp();
 
   const isAr = language === 'ar';
 
-  const [activeAdminTab, setActiveAdminTab] = useState<'cloud_sql' | 'firebase' | 'storage' | 'maps' | 'features' | 'system'>('cloud_sql');
+  const [activeAdminTab, setActiveAdminTab] = useState<'cloud_sql' | 'firebase' | 'storage' | 'maps' | 'whatsapp' | 'features' | 'system'>('cloud_sql');
+
+  // New WhatsApp line form state
+  const [newWaNameAr, setNewWaNameAr] = useState('');
+  const [newWaNameEn, setNewWaNameEn] = useState('');
+  const [newWaPhone, setNewWaPhone] = useState('');
+  const [newWaDeptAr, setNewWaDeptAr] = useState('قسم المتابعة الميدانية وخدمة العملاء');
+  const [newWaDeptEn, setNewWaDeptEn] = useState('Field Coordination & Logistics Desk');
 
   // Local form states for editing configs
   const [localSql, setLocalSql] = useState(sqlConfig);
@@ -165,6 +182,7 @@ export const AdminControlPanel: React.FC = () => {
           { id: 'firebase', labelAr: 'سحابة Firebase (Firestore & Auth)', labelEn: 'Firebase (Firestore/Auth)', icon: Cloud },
           { id: 'storage', labelAr: 'التخزين السحابي (S3 / GCS)', labelEn: 'Cloud Object Storage', icon: HardDrive },
           { id: 'maps', labelAr: 'خرائط وملاحة Google Maps Platform', labelEn: 'Google Maps API', icon: MapPin },
+          { id: 'whatsapp', labelAr: 'أرقام وهواتف واتساب المتابعة والتوصيل', labelEn: 'WhatsApp Dispatch Desk', icon: MessageSquare },
           { id: 'features', labelAr: 'تعديل وتفعيل مميزات النظام', labelEn: 'Feature Flags & Safety', icon: Sliders },
           { id: 'system', labelAr: 'حالة النظام وسجلات السيرفر', labelEn: 'System Health & Telemetry', icon: Server },
         ].map((tab) => {
@@ -686,6 +704,192 @@ export const AdminControlPanel: React.FC = () => {
                 {testingStatus === 'maps' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 <span>{testingStatus === 'maps' ? (isAr ? 'جاري التحقق...' : 'Validating...') : (isAr ? 'حفظ وتفعيل خرائط جوجل' : 'Save & Verify Maps API')}</span>
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* ==================== TAB: WHATSAPP DISPATCH DESK ==================== */}
+        {activeAdminTab === 'whatsapp' && (
+          <div className="flex flex-col gap-6 max-w-4xl text-slate-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+              <div>
+                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-emerald-400" />
+                  <span>{isAr ? 'إدارة خطوط وأرقام واتساب المتابعة والتوصيل' : 'WhatsApp Customer Coordination & Dispatch Hub'}</span>
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {isAr 
+                    ? 'إضافة وتفعيل أكثر من رقم واتساب لمتابعة العملاء، إرسال رسائل طلب اللوكيشن، واستقبال الإحداثيات وتوجيه الشاحنات فوراً.' 
+                    : 'Manage active WhatsApp dispatch lines to request client GPS coordinates and issue direct delivery routes.'}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[11px] font-mono px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold">
+                  {whatsappAccounts.filter(a => a.isActive).length} {isAr ? 'خطوط نشطة' : 'Active Lines'}
+                </span>
+              </div>
+            </div>
+
+            {/* Form to Add New WhatsApp Number */}
+            <div className="p-5 rounded-2xl bg-slate-950/80 border border-slate-800 flex flex-col gap-3.5">
+              <span className="text-xs font-bold text-[#DFBA6B] flex items-center gap-1.5 uppercase tracking-wider">
+                <Plus className="w-4 h-4" />
+                <span>{isAr ? 'إضافة رقم واتساب جديد لفريق المتابعة:' : 'Register New WhatsApp Dispatch Number:'}</span>
+              </span>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] text-slate-400">{isAr ? 'اسم الفريق / الخط (عربي):' : 'Team / Desk Name (AR):'}</label>
+                  <input
+                    type="text"
+                    value={newWaNameAr}
+                    onChange={(e) => setNewWaNameAr(e.target.value)}
+                    placeholder={isAr ? 'مثال: فريق متابعة الشيخ زايد والجيزة' : 'e.g. Zayed Delivery Hotline'}
+                    className="bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-100 outline-none focus:border-[#C5A45B]"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] text-slate-400">{isAr ? 'اسم الفريق / الخط (إنجليزي):' : 'Team / Desk Name (EN):'}</label>
+                  <input
+                    type="text"
+                    value={newWaNameEn}
+                    onChange={(e) => setNewWaNameEn(e.target.value)}
+                    placeholder="Zayed Dispatch Hotline"
+                    className="bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-100 outline-none focus:border-[#C5A45B]"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] text-slate-400">{isAr ? 'رقم هاتف الواتساب (مع كود الدولة):' : 'WhatsApp Phone (with Country Code):'}</label>
+                  <input
+                    type="text"
+                    value={newWaPhone}
+                    onChange={(e) => setNewWaPhone(e.target.value)}
+                    placeholder="201012345678"
+                    className="bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-100 font-mono outline-none focus:border-[#C5A45B]"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] text-slate-400">{isAr ? 'القسم التشغيلي:' : 'Department:'}</label>
+                  <input
+                    type="text"
+                    value={newWaDeptAr}
+                    onChange={(e) => setNewWaDeptAr(e.target.value)}
+                    placeholder="قسم المتابعة الميدانية وخدمة العملاء"
+                    className="bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-100 outline-none focus:border-[#C5A45B]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  onClick={() => {
+                    if (!newWaPhone.trim()) {
+                      setStatusFeedback({ type: 'error', message: isAr ? 'يرجى إدخال رقم الهاتف أولاً' : 'Please provide a valid phone number' });
+                      return;
+                    }
+                    const newAcc: WhatsAppAccount = {
+                      id: `WA-${Date.now().toString().slice(-4)}`,
+                      nameAr: newWaNameAr.trim() || `خط واتساب ${newWaPhone.slice(-4)}`,
+                      nameEn: newWaNameEn.trim() || `WhatsApp Line ${newWaPhone.slice(-4)}`,
+                      phone: newWaPhone.replace(/[^0-9]/g, ''),
+                      departmentAr: newWaDeptAr,
+                      departmentEn: newWaDeptEn,
+                      isActive: true,
+                      messagesSentCount: 0,
+                      addedAt: new Date().toISOString().replace('T', ' ').slice(0, 16)
+                    };
+                    addWhatsAppAccount(newAcc);
+                    setNewWaNameAr('');
+                    setNewWaNameEn('');
+                    setNewWaPhone('');
+                    setStatusFeedback({
+                      type: 'success',
+                      message: isAr ? `تمت إضافة وتفعيل رقم الواتساب (${newAcc.phone}) بنجاح في التطبيق!` : `WhatsApp account (${newAcc.phone}) activated successfully!`
+                    });
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-md shadow-emerald-600/20 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{isAr ? 'تفعيل وإضافة الرقم للنظام' : 'Activate & Save Line'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* List of Configured WhatsApp Lines */}
+            <div className="flex flex-col gap-3">
+              <span className="text-xs font-bold text-slate-300">
+                {isAr ? 'الأرقام المفعلة في المنظومة حالياً:' : 'Active Operational WhatsApp Lines:'}
+              </span>
+
+              <div className="flex flex-col gap-2.5">
+                {whatsappAccounts.map(account => (
+                  <div
+                    key={account.id}
+                    className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-slate-700 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg ${
+                        account.isActive ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-slate-800 text-slate-500 border border-slate-700'
+                      }`}>
+                        <Phone className="w-5 h-5" />
+                      </div>
+
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-white">{isAr ? account.nameAr : account.nameEn}</span>
+                          <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/40">
+                            +{account.phone}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-2">
+                          <span>{isAr ? account.departmentAr : account.departmentEn}</span>
+                          <span>·</span>
+                          <span className="text-slate-500 font-mono">{account.messagesSentCount} {isAr ? 'رسالة مرسلة' : 'messages'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-end sm:self-auto">
+                      <button
+                        onClick={() => {
+                          const testUrl = `https://wa.me/${account.phone}?text=${encodeURIComponent('اختبار اتصال منظومة عصفور كريستال - الخط نشط')}`;
+                          window.open(testUrl, '_blank');
+                        }}
+                        className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs flex items-center gap-1 cursor-pointer"
+                        title={isAr ? 'إرسال رسالة اختبار' : 'Test WhatsApp Ping'}
+                      >
+                        <Send className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-[11px]">{isAr ? 'تجربة' : 'Ping'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => updateWhatsAppAccount({ ...account, isActive: !account.isActive })}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer ${
+                          account.isActive
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                            : 'bg-slate-800 text-slate-400 border-slate-700'
+                        }`}
+                      >
+                        {account.isActive ? (isAr ? 'مفعل وجاهز' : 'Active') : (isAr ? 'معطل' : 'Paused')}
+                      </button>
+
+                      {whatsappAccounts.length > 1 && (
+                        <button
+                          onClick={() => deleteWhatsAppAccount(account.id)}
+                          className="p-2 rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-400 border border-red-800/40 cursor-pointer"
+                          title={isAr ? 'حذف الرقم' : 'Delete'}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
